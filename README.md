@@ -1,3 +1,23 @@
+[![Group](https://img.shields.io/badge/Group-Telegram-blue?style=plastic)](https://t.me/eoliannwindowstool)
+![Followers](https://img.shields.io/github/followers/eoliann?style=plastic&color=green)
+![Watchers](https://img.shields.io/github/watchers/eoliann/Eoliann_Windows_Tools_2?style=plastic)
+![Stars](https://img.shields.io/github/stars/eoliann/Eoliann_Windows_Tools_2?style=plastic)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue?style=plastic)](https://www.paypal.com/donate/?hosted_button_id=PTH2EXUDS423S)
+[![Donate](https://img.shields.io/badge/Donate-Revolut-8A2BE2?style=plastic)](https://revolut.me/adriannm9)
+[![Donate](https://img.shields.io/badge/Donate-KoFi-green?style=plastic)](https://ko-fi.com/eoliann)
+
+![Release Date](https://img.shields.io/github/release-date/eoliann/Eoliann_Windows_Tools_2?style=plastic)
+![Last Commit](https://img.shields.io/github/last-commit/eoliann/Eoliann_Windows_Tools_2?style=plastic)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=plastic)](LICENSE.md)
+![OS](https://img.shields.io/badge/OS-Windows-blue?style=plastic)
+![Lang](https://img.shields.io/badge/Lang-Rust-magenta?style=plastic)
+
+![Total Downloads](https://img.shields.io/github/downloads/eoliann/Eoliann_Windows_Tools_2/total?style=plastic)
+![](https://img.shields.io/github/downloads/eoliann/Eoliann_Windows_Tools_2/latest/Eoliann_Windows_Tools_2_w11.exe?displayAssetName=true&style=plastic&color=green)
+![](https://img.shields.io/github/downloads/eoliann/Eoliann_Windows_Tools_2/latest/Eoliann_Windows_Tools_2_Installer.exe?displayAssetName=true&style=plastic&color=red)
+[![Downloads latest](https://img.shields.io/github/downloads/eoliann/Eoliann_Windows_Tools_2/latest/total?style=plastic)](https://github.com/eoliann/Eoliann_Windows_Tools_2/releases/latest/download/Eoliann_Windows_Tools_2_w11.exe)
+
+
 # Eoliann Windows Tools 2
 
 Windows 11 administration toolkit built with React + Tauri (Rust).
