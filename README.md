@@ -10,7 +10,7 @@
 ![Last Commit](https://img.shields.io/github/last-commit/eoliann/Eoliann_Windows_Tools_2?style=plastic)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=plastic)](LICENSE.md)
 ![OS](https://img.shields.io/badge/OS-Windows-blue?style=plastic)
-![Lang](https://img.shields.io/badge/Lang-React-Rust-magenta?style=plastic)
+![Lang](https://img.shields.io/badge/Lang-React_Rust-magenta?style=plastic)
 
 ![Total Downloads](https://img.shields.io/github/downloads/eoliann/Eoliann_Windows_Tools_2/total?style=plastic)
 ![](https://img.shields.io/github/downloads/eoliann/Eoliann_Windows_Tools_2/latest/eoliann-windows-tools.exe?displayAssetName=true&style=plastic&color=green)
