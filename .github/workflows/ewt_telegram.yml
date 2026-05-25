@@ -1,4 +1,4 @@
-name: Notify Telegram on Release
+name: Notify Telegram on Release (EN)
 
 on:
   workflow_dispatch:
