@@ -28,6 +28,9 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+FEATURE_PARITY.md
+FIX_19_POINTS.md
+FIXES_2026_05_24.md
 
 # Temporary files
 tmp/
