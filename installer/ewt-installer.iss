@@ -3,7 +3,7 @@
 
 [Setup]
 AppName=Eoliann Windows Tools
-AppVersion=2.0.0
+AppVersion=2
 AppPublisher=eoliann
 DefaultDirName={pf}\Eoliann Windows Tools
 DefaultGroupName=Eoliann Windows Tools
