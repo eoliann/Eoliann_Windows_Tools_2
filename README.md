@@ -1,4 +1,4 @@
-# Eoliann Windows Tools v2
+# Eoliann Windows Tools 2
 
 Windows 11 administration toolkit built with React + Tauri (Rust).
 
