@@ -24,22 +24,22 @@ jobs:
         run: |
           # Construim textul cu newline-uri reale (Telegram HTML nu acceptă <br>)
           TEXT="$(printf '%s\n' \
-            '📢 <b>Eoliann Windows Tools 2 are o nouă versiune pe GitHub!</b>' \
+            '📢 <b>Eoliann Windows Tools 2 has a new version on GitHub!</b>' \
             "<b>${RELEASE_NAME}</b> (tag: <code>${RELEASE_TAG}</code>)" \
             "" \
-            "👉 Un set de instrumente rapid pentru Windows 11, scris în Rust, care include comenzi de administrare utile și ajustări pentru optimizare Windows 10/11." \
-            "Cod gratuit și curat, fără spyware, malware sau reclame." \
+            "👉 A lightweight toolkit for Windows 11, written in Rust, that includes useful administrative commands and tweaks for optimizing Windows 10/11." \
+            "Clean, ad-free code with no spyware or malware." \
             "" \
-            "👉 <a href=\"${RELEASE_URL}\">Mergi la pagina noii versiuni</a>" \
+            "👉 <a href=\"${RELEASE_URL}\">Go to the new version's page</a>" \
           )"
           
           # Adăugăm link-urile de descărcare doar dacă există
           if [ -n "$ASSET_URL1" ]; then
-            TEXT+=$'\n'"⬇️ <a href=\"${ASSET_URL1}\">Descarcă fișierul de instalare</a>"
+            TEXT+=$'\n'"⬇️ <a href=\"${ASSET_URL1}\">Download the installation file</a>"
           fi
           
           if [ -n "$ASSET_URL2" ]; then
-            TEXT+=$'\n'"⬇️ <a href=\"${ASSET_URL2}\">Descarcă fișierul portabil</a>"
+            TEXT+=$'\n'"⬇️ <a href=\"${ASSET_URL2}\">Download the portable file</a>"
           fi
           IFS=',' read -r -a CHAT_ARRAY <<< "${TG_CHATS}"
           echo "TG_CHATS raw: >${TG_CHATS}<"
