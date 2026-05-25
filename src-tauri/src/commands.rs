@@ -988,6 +988,8 @@ else { net accounts /maxpwage:unlimited; 'Password expiration disabled: max age 
         // PERFORMANCE
         "visual_performance" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 2 /f"#),
         "ultimate_performance" => cmd_shell(r"powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 & powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61"),
+        "performance_lock" => cmd_shell(r"powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c & powercfg /change standby-timeout-ac 0 & powercfg /change standby-timeout-dc 0 & powercfg /change hibernate-timeout-ac 0 & powercfg /change hibernate-timeout-dc 0 & powercfg /change monitor-timeout-ac 0 & powercfg /change monitor-timeout-dc 0"),
+        "restore_balanced_defaults" => cmd_shell(r"powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e & powercfg /change standby-timeout-ac 30 & powercfg /change standby-timeout-dc 15 & powercfg /change hibernate-timeout-ac 180 & powercfg /change hibernate-timeout-dc 60 & powercfg /change monitor-timeout-ac 15 & powercfg /change monitor-timeout-dc 5 & powercfg /change disk-timeout-ac 20 & powercfg /change disk-timeout-dc 10"),
         "high_performance" => cmd_shell(r"powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"),
         "balanced_power" => cmd_shell(r"powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e"),
         "power_saver" => cmd_shell(r"powercfg /setactive a1841308-3541-4fab-bc81-f71556f20b4a"),

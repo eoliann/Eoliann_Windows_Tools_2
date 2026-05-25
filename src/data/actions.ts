@@ -92,9 +92,6 @@ export const healthActions: ToolAction[] = [
   { id: "hibernate_off", title: "Disable hibernation", description: "Turns Windows hibernation off.", icon: "Sun", category: "Power", requiresAdmin: true, risk: "medium" },
   { id: "hibernation_laptop_defaults", title: "Set hibernation laptop defaults", description: "Sets common laptop sleep button/lid behavior to hibernate.", icon: "Laptop", category: "Power", requiresAdmin: true, risk: "high" },
   { id: "restore_hibernation_defaults", title: "Restore hibernation defaults", description: "Restores hibernation registry attributes and disables hibernation.", icon: "LaptopMinimal", category: "Power", requiresAdmin: true, risk: "high" },
-  { id: "disable_sleep", title: "Disable Sleep", description: "Sets AC/DC standby timeout to never.", icon: "Bed", category: "Power Tweaks", requiresAdmin: true, risk: "medium" },
-  { id: "disable_hdd_timeout", title: "Disable HDD/SSD timeout", description: "Prevents drives from powering down after inactivity.", icon: "HardDrive", category: "Power Tweaks", requiresAdmin: true, risk: "medium" },
-  { id: "disable_monitor_timeout", title: "Disable Monitor timeout", description: "Prevents monitor timeout on AC/DC power.", icon: "Monitor", category: "Power Tweaks", requiresAdmin: true, risk: "medium" },
   { id: "battery_report", title: "Battery report", description: "Asks where to save the Windows battery report, then generates the HTML file there.", icon: "BatteryCharging", category: "Diagnostics", risk: "low" },
   { id: "memory_diagnostic", title: "Memory diagnostic", description: "Launches Windows Memory Diagnostic.", icon: "Cpu", category: "Diagnostics", risk: "low" },
   { id: "delete_restore_points", title: "Remove restore points", description: "Opens native Windows System Protection cleanup (Configure/Delete) to remove restore points.", icon: "Trash", category: "System Restore", requiresAdmin: true, risk: "medium" },
@@ -103,10 +100,15 @@ export const healthActions: ToolAction[] = [
 ];
 
 export const performanceActions: ToolAction[] = [
-  { id: "ultimate_performance", title: "Ultimate Performance plan", description: "Creates/selects the Ultimate Performance power plan when supported.", icon: "Zap", category: "Power Plans", requiresAdmin: true, risk: "medium" },
+  { id: "performance_lock", title: "Performance Lock (No Sleep/Display)", description: "High Performance + disables sleep and display timeout (AC/DC).", icon: "Rocket", category: "Power Plans", requiresAdmin: true, risk: "medium" },
+  { id: "restore_balanced_defaults", title: "Restore Balanced + Default Timeouts", description: "Switches to Balanced and restores default sleep/hibernate/display timeouts.", icon: "RotateCcw", category: "Power Plans", requiresAdmin: true, risk: "low" },
   { id: "high_performance", title: "High Performance", description: "Switches to the built-in High Performance power plan.", icon: "Gauge", category: "Power Plans", requiresAdmin: true, risk: "medium" },
   { id: "balanced_power", title: "Balanced", description: "Switches back to the default Balanced power plan.", icon: "Scale", category: "Power Plans", risk: "low" },
   { id: "power_saver", title: "Power Saver", description: "Switches to Windows Power Saver plan.", icon: "BatteryLow", category: "Power Plans", risk: "low" },
+  { id: "ultimate_performance", title: "Ultimate Performance plan", description: "Creates/selects Ultimate Performance when supported.", icon: "Zap", category: "Power Plans", requiresAdmin: true, risk: "medium" },
+  { id: "disable_sleep", title: "Disable Sleep", description: "Sets sleep timeout to Never (AC/DC).", icon: "Bed", category: "Power Tweaks", requiresAdmin: true, risk: "medium" },
+  { id: "disable_monitor_timeout", title: "Disable Monitor timeout", description: "Sets display timeout to Never (AC/DC).", icon: "Monitor", category: "Power Tweaks", requiresAdmin: true, risk: "medium" },
+  { id: "disable_hdd_timeout", title: "Disable HDD/SSD timeout", description: "Sets disk timeout to Never (AC/DC).", icon: "HardDrive", category: "Power Tweaks", requiresAdmin: true, risk: "medium" },
   { id: "hags_on", title: "Enable HAGS", description: "Enables hardware-accelerated GPU scheduling. Restart required.", icon: "Gpu", category: "Graphics", requiresAdmin: true, risk: "high" },
   { id: "hags_off", title: "Disable HAGS", description: "Disables hardware-accelerated GPU scheduling. Restart required.", icon: "Gpu", category: "Graphics", requiresAdmin: true, risk: "high" },
   { id: "vbs_off", title: "Disable VBS", description: "Disables common virtualization-based security flags. Restart required.", icon: "ShieldOff", category: "Security/performance", requiresAdmin: true, risk: "high" },

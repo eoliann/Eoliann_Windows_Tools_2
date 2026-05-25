@@ -8,7 +8,7 @@
 
 ![Release Date](https://img.shields.io/github/release-date/eoliann/Eoliann_Windows_Tools_2?style=plastic)
 ![Last Commit](https://img.shields.io/github/last-commit/eoliann/Eoliann_Windows_Tools_2?style=plastic)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=plastic)](LICENSE.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=plastic)](LICENSE)
 ![OS](https://img.shields.io/badge/OS-Windows-blue?style=plastic)
 ![Lang](https://img.shields.io/badge/Lang-React_&_Rust-magenta?style=plastic)
 
@@ -70,6 +70,23 @@ npm run tauri build
 ```
 
 Build artifacts are generated under `src-tauri/target/release/bundle`.
+
+## Screenshots Gallery
+
+Add your screenshots in `docs/screenshots/` using these filenames:
+
+- `dashboard.png`
+- `tools.png`
+- `apps.png`
+- `windows-app-removal.png`
+
+| Dashboard | Tools |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Tools](docs/screenshots/tools.png) |
+
+| Apps | Windows App Removal |
+|---|---|
+| ![Apps](docs/screenshots/apps.png) | ![Windows App Removal](docs/screenshots/windows-app-removal.png) |
 
 ## Repository Structure
 
