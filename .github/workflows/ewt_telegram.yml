@@ -1,4 +1,4 @@
-name: Notify Telegram EWT on Release
+name: Notify Telegram on Release
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ jobs:
 
     env:
       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-      TG_EWT: ${{ secrets.TG_CHATS }}
+      TG_CHATS: ${{ secrets.TG_CHATS }}
       RELEASE_NAME: ${{ github.event.release.name || github.event.repository.name }}
       RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
       RELEASE_URL: ${{ github.event.release.html_url || format('{0}/{1}/releases/latest', github.server_url, github.repository) }}
@@ -35,17 +35,21 @@ jobs:
           
           # Adăugăm link-urile de descărcare doar dacă există
           if [ -n "$ASSET_URL1" ]; then
-            TEXT+=$'\n'"⬇️ <a href=\"${ASSET_URL1}\">Download the installation file</a>"
+            TEXT+=$'\n'"⬇️ <a href=\"${ASSET_URL1}\">Download the portable file</a>"
           fi
           
           if [ -n "$ASSET_URL2" ]; then
-            TEXT+=$'\n'"⬇️ <a href=\"${ASSET_URL2}\">Download the portable file</a>"
+            TEXT+=$'\n'"⬇️ <a href=\"${ASSET_URL2}\">Download the installation file</a>"
           fi
+
           IFS=',' read -r -a CHAT_ARRAY <<< "${TG_CHATS}"
+
           echo "TG_CHATS raw: >${TG_CHATS}<"
+
           for ITEM in "${CHAT_ARRAY[@]}"; do
             ITEM_TRIM=$(echo "$ITEM" | xargs)
             [ -z "$ITEM_TRIM" ] && continue
+
             if [[ "$ITEM_TRIM" == *":"* ]]; then
               CHAT_ID="${ITEM_TRIM%%:*}"
               THREAD_ID="${ITEM_TRIM##*:}"
@@ -62,3 +66,7 @@ jobs:
                 --data-urlencode "text=${TEXT}"
             fi
           done
+
+
+
+
