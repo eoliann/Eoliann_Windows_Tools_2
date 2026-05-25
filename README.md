@@ -19,11 +19,7 @@
 
 # Eoliann Windows Tools 2
 
-Windows 11 administration toolkit built with React + Tauri (Rust).
-
-## Overview
-
-Eoliann Windows Tools centralizes common maintenance and optimization tasks in a single desktop app:
+Windows 11 administration toolkit built with React + Tauri (Rust) - centralizes common maintenance and optimization tasks in a single desktop app:
 
 - system information and diagnostics
 - cleanup and maintenance tools
