@@ -13,8 +13,6 @@
 ![Lang](https://img.shields.io/badge/Lang-React_&_Rust-magenta?style=plastic)
 
 ![Total Downloads](https://img.shields.io/github/downloads/eoliann/Eoliann_Windows_Tools_2/total?style=plastic)
-![](https://img.shields.io/github/downloads/eoliann/Eoliann_Windows_Tools_2/latest/eoliann-windows-tools.exe?displayAssetName=true&style=plastic&color=green)
-![](https://img.shields.io/github/downloads/eoliann/Eoliann_Windows_Tools_2/latest/Eoliann.Windows.Tools_x64-setup.exe?displayAssetName=true&style=plastic&color=red)
 
 
 # Eoliann Windows Tools 2
