@@ -62,7 +62,7 @@ export default function About({ appVersion }: AboutProps) {
         <Info size={44} />
         <div>
           <p className="eyebrow">About</p>
-          <h2>Eoliann Windows Tools {appVersion ? `v${appVersion}` : ""}</h2>
+          <h2>Eoliann Windows Tools 2 {appVersion ? `v${appVersion}` : ""}</h2>
           <p>Developer: Eoliann. Windows 11 toolkit for practical administration, cleanup, diagnostics and tweaks.</p>
         </div>
       </section>

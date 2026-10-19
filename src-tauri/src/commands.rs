@@ -596,12 +596,15 @@ fn set_run_at_startup(enable: bool) -> Result<String, String> {
 $ErrorActionPreference = 'Stop'
 $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 Ensure-Key $run
-Set-ItemProperty -Path $run -Name 'Eoliann Windows Tools' -Value '"{}"'
+Set-ItemProperty -Path $run -Name 'Eoliann Windows Tools 2' -Value '"{}"'
+# Value name used before v1.1.1 (shared with Eoliann Windows Tools v1).
+Remove-ItemProperty -Path $run -Name 'Eoliann Windows Tools' -ErrorAction SilentlyContinue
 'Start with Windows enabled.'
 "#, exe_str))
     } else {
         powershell(r#"
 $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+Remove-ItemProperty -Path $run -Name 'Eoliann Windows Tools 2' -ErrorAction SilentlyContinue
 Remove-ItemProperty -Path $run -Name 'Eoliann Windows Tools' -ErrorAction SilentlyContinue
 'Start with Windows disabled.'
 "#)

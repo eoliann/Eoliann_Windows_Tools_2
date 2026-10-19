@@ -28,7 +28,7 @@ export default function Sidebar({ activePage, onChange }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-mark"><img src="/app-icon.png" alt="Eoliann Windows Tools" className="brand-icon" /></div>
+        <div className="brand-mark"><img src="/app-icon.png" alt="Eoliann Windows Tools 2" className="brand-icon" /></div>
         <div>
           <strong>Eoliann</strong>
           <span>Windows Tools</span>
