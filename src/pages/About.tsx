@@ -1,9 +1,11 @@
 import { ExternalLink, Gift, Github, HeartHandshake, Info, LockKeyhole, ScrollText, ShieldAlert } from "lucide-react";
+import { useState } from "react";
 import { openExternalUrl } from "../lib/commands";
+import { checkForAppUpdate, downloadAndInstallUpdate, releasesUrl as latestReleaseUrl } from "../lib/updater";
 
-const repoUrl = "https://github.com/eoliann/Eoliann_Windows_Tools";
-const releasesUrl = "https://github.com/eoliann/Eoliann_Windows_Tools/releases";
-const supportUrl = "https://github.com/eoliann/Eoliann_Windows_Tools#-support";
+const repoUrl = "https://github.com/eoliann/Eoliann_Windows_Tools_2";
+const releasesUrl = "https://github.com/eoliann/Eoliann_Windows_Tools_2/releases";
+const supportUrl = "https://github.com/eoliann/Eoliann_Windows_Tools_2#-support";
 const revolutUrl = "https://revolut.me/adriannm9";
 const paypalUrl = "https://www.paypal.com/donate/?hosted_button_id=PTH2EXUDS423S";
 const kofiUrl = "https://ko-fi.com/eoliann";
@@ -13,8 +15,45 @@ interface AboutProps {
 }
 
 export default function About({ appVersion }: AboutProps) {
+  const [updateStatus, setUpdateStatus] = useState("");
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [updateFailed, setUpdateFailed] = useState(false);
+
   const open = (url: string) => {
     void openExternalUrl(url);
+  };
+
+  const checkUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateFailed(false);
+    setUpdateStatus("Checking for updates...");
+    try {
+      const result = await checkForAppUpdate();
+      if (!result.available) {
+        setUpdateStatus(`No updates available. Current version: ${result.currentVersion}`);
+        return;
+      }
+      setUpdateStatus(`Update available: ${result.currentVersion} -> ${result.latestVersion}. Click Install update.`);
+    } catch (error) {
+      setUpdateFailed(true);
+      setUpdateStatus(`Update check failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const installUpdate = async () => {
+    setInstallingUpdate(true);
+    setUpdateFailed(false);
+    setUpdateStatus("Downloading and installing update...");
+    try {
+      await downloadAndInstallUpdate(setUpdateStatus);
+    } catch (error) {
+      setUpdateFailed(true);
+      setUpdateStatus(`Update install failed: ${error instanceof Error ? error.message : String(error)}`);
+      setInstallingUpdate(false);
+    }
   };
 
   return (
@@ -39,6 +78,25 @@ export default function About({ appVersion }: AboutProps) {
           <button className="ghost-button" onClick={() => open(releasesUrl)}><ExternalLink size={18} /> Releases <ExternalLink size={14} /></button>
           <button className="ghost-button" onClick={() => open(telegramUrl)}><ExternalLink size={18} /> Telegram group <ExternalLink size={14} /></button>
         </div>
+      </section>
+
+      <section className="content-section prose-card">
+        <h2>Updates</h2>
+        <p>Checks GitHub Releases and installs signed updates directly in the app.</p>
+        <div className="links-grid">
+          <button className="ghost-button" onClick={() => void checkUpdate()} disabled={checkingUpdate || installingUpdate}>
+            {checkingUpdate ? "Checking..." : "Check for updates"}
+          </button>
+          <button className="primary-button" onClick={() => void installUpdate()} disabled={checkingUpdate || installingUpdate}>
+            {installingUpdate ? "Installing..." : "Install update"}
+          </button>
+        </div>
+        {updateStatus ? <p className={updateFailed ? "notice warn" : undefined}>{updateStatus}</p> : null}
+        {updateFailed ? (
+          <button className="ghost-button" onClick={() => open(latestReleaseUrl)}>
+            <ExternalLink size={16} /> Download the latest version manually
+          </button>
+        ) : null}
       </section>
 
       <section className="legal-grid">

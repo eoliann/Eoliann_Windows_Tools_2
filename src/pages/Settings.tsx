@@ -2,6 +2,7 @@ import { Activity, Cog, ExternalLink, FolderCog, HardDrive, MonitorCog, Settings
 import { useState } from "react";
 import ActionGrid from "../components/ActionGrid";
 import { settingsActions } from "../data/actions";
+import { openExternalUrl } from "../lib/commands";
 import type { ToolAction } from "../types";
 
 interface Props {
@@ -81,7 +82,7 @@ export default function Settings({ runningId, onRun, onOpenTool, onCreateLocalUs
         <h2>Operational notes</h2>
         <p>Run the app as administrator for full functionality. Non-elevated sessions can still read system information and run user-level tweaks.</p>
         <p>Release builds keep the Tauri command list restricted to mapped actions; the UI does not expose arbitrary shell execution.</p>
-        <a href="https://github.com/eoliann/Eoliann_Windows_Tools" target="_blank" rel="noreferrer"><ExternalLink size={16} /> Open GitHub repository</a>
+        <button className="ghost-button" onClick={() => void openExternalUrl("https://github.com/eoliann/Eoliann_Windows_Tools_2")}><ExternalLink size={16} /> Open GitHub repository</button>
       </section>
     </div>
   );

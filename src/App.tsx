@@ -20,8 +20,9 @@ import QuickKeys from "./pages/QuickKeys";
 import Settings from "./pages/Settings";
 import About from "./pages/About";
 import { allActions } from "./data/actions";
-import type { DiskHealth as DiskHealthType, PageId, SystemOverview, Theme, ToolAction } from "./types";
-import { createLocalUser, getDiskHealth, getSystemOverview, openSystemTool, removeWindowsApp, runAction, wingetAction, wingetUpgradeAllProgress } from "./lib/commands";
+import type { DiskHealth as DiskHealthType, PageId, SystemOverview, Theme, ToolAction, WindowsAppTarget } from "./types";
+import { createLocalUser, getDiskHealth, getSystemOverview, openExternalUrl, openSystemTool, removeWindowsApps, restoreDeprovisionedApp, runAction, wingetAction, wingetUpgradeAllProgress } from "./lib/commands";
+import { checkForAppUpdate, downloadAndInstallUpdate, releasesUrl } from "./lib/updater";
 
 const pageMeta: Record<PageId, { title: string; subtitle: string }> = {
   dashboard: { title: "Dashboard", subtitle: "Fast system status and quick actions. Detailed disk data loads only when requested." },
@@ -45,7 +46,8 @@ const actionTitle = (id: string | null) => {
   if (id.startsWith("winget-install")) return "Installing selected applications";
   if (id.startsWith("winget-uninstall")) return "Uninstalling selected applications";
   if (id.startsWith("winget-upgrade")) return "Updating selected applications";
-  if (id.startsWith("remove-")) return "Removing bundled Windows app";
+  if (id === "debloat-windows-apps") return "Deprovisioning and removing Windows apps";
+  if (id === "restore-deprovisioned-app") return "Removing app from Deprovisioned list";
   if (id === "create-local-user") return "Creating local user";
   return allActions.find((action) => action.id === id)?.title ?? id;
 };
@@ -63,6 +65,12 @@ export default function App() {
   const [wingetPercent, setWingetPercent] = useState(0);
   const [wingetMessage, setWingetMessage] = useState("");
   const [windowsAppsRefreshKey, setWindowsAppsRefreshKey] = useState(0);
+  const [updateAvailableVersion, setUpdateAvailableVersion] = useState<string | null>(null);
+  const [updateCurrentVersion, setUpdateCurrentVersion] = useState<string | null>(null);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateProgress, setUpdateProgress] = useState<string | null>(null);
+  const [hideUpdateNotice, setHideUpdateNotice] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const meta = useMemo(() => pageMeta[activePage], [activePage]);
@@ -140,6 +148,46 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    const checkUpdateSilently = async () => {
+      try {
+        const result = await checkForAppUpdate();
+        if (!mounted) return;
+        setUpdateCurrentVersion(result.currentVersion);
+        if (!result.available || !result.latestVersion) return;
+        const dismissedVersion = localStorage.getItem("ewt-update-dismissed-version");
+        if (dismissedVersion === result.latestVersion) return;
+        setUpdateAvailableVersion(result.latestVersion);
+      } catch {
+        // Silent by design
+      }
+    };
+    void checkUpdateSilently();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const dismissUpdateNotice = useCallback(() => {
+    if (updateAvailableVersion) {
+      localStorage.setItem("ewt-update-dismissed-version", updateAvailableVersion);
+    }
+    setHideUpdateNotice(true);
+  }, [updateAvailableVersion]);
+
+  const installUpdateNow = useCallback(async () => {
+    setUpdateInstalling(true);
+    setUpdateError(null);
+    try {
+      await downloadAndInstallUpdate(setUpdateProgress);
+    } catch (error) {
+      setUpdateError(error instanceof Error ? error.message : String(error));
+      setUpdateProgress(null);
+      setUpdateInstalling(false);
+    }
+  }, []);
+
   const requestRun = (action: ToolAction) => {
     if (runningId) return;
     if (action.risk === "high" || action.requiresAdmin) {
@@ -182,17 +230,31 @@ export default function App() {
     }
   };
 
-  const removeApp = async (packageName: string) => {
-    if (runningId) return;
-    setRunningId(`remove-${packageName}`);
-    appendOutput(`Removing Windows app: ${packageName}`);
+  const removeApps = async (targets: WindowsAppTarget[]) => {
+    if (runningId || !targets.length) return;
+    setRunningId("debloat-windows-apps");
+    appendOutput(`Deprovisioning and removing: ${targets.map((target) => target.packageName).join(", ")}`);
     try {
-      const result = await removeWindowsApp(packageName);
-      appendOutput(result || "Package removal completed.");
-      refreshWindowsApps();
+      const result = await removeWindowsApps(targets);
+      appendOutput(result || "Debloat completed.");
     } catch (error) {
       appendOutput(`ERROR: ${String(error)}`);
     } finally {
+      refreshWindowsApps();
+      setRunningId(null);
+    }
+  };
+
+  const restoreApp = async (familyName: string) => {
+    if (runningId) return;
+    setRunningId("restore-deprovisioned-app");
+    appendOutput(`Removing from Deprovisioned list: ${familyName}`);
+    try {
+      appendOutput(await restoreDeprovisionedApp(familyName));
+    } catch (error) {
+      appendOutput(`ERROR: ${String(error)}`);
+    } finally {
+      refreshWindowsApps();
       setRunningId(null);
     }
   };
@@ -246,7 +308,7 @@ export default function App() {
             {activePage === "performance" && <Performance runningId={runningId} onRun={requestRun} />}
             {activePage === "customize" && <Customize runningId={runningId} onRun={requestRun} />}
             {activePage === "apps" && <Apps running={Boolean(runningId)} runningId={runningId} onRun={requestRun} onInstall={(ids) => runWinget("install", ids)} onUninstall={(ids) => runWinget("uninstall", ids)} onUpgrade={(ids) => runWinget("upgrade", ids)} />}
-            {activePage === "windowsApps" && <WindowsApps running={Boolean(runningId)} onRemove={removeApp} refreshKey={windowsAppsRefreshKey} />}
+            {activePage === "windowsApps" && <WindowsApps running={Boolean(runningId)} onRemove={removeApps} onRestore={restoreApp} refreshKey={windowsAppsRefreshKey} />}
             {activePage === "diskHealth" && <DiskHealth disks={diskHealth} loading={diskLoading} onRefresh={refreshDiskHealth} />}
             {activePage === "quickKeys" && <QuickKeys onOpenTool={launchTool} />}
             {activePage === "settings" && <Settings runningId={runningId} onRun={requestRun} onOpenTool={launchTool} onCreateLocalUser={createUser} creatingUser={runningId === "create-local-user"} />}
@@ -269,6 +331,24 @@ export default function App() {
                 <p>{wingetMessage || "Working..."}</p>
               </>
             )}
+          </div>
+        </div>
+      )}
+      {updateAvailableVersion && !hideUpdateNotice && (
+        <div className="update-toast" role="status" aria-live="polite">
+          <strong>Update available</strong>
+          <p>
+            New version <b>{updateAvailableVersion}</b>
+            {updateCurrentVersion ? ` (current ${updateCurrentVersion})` : ""}
+          </p>
+          {updateProgress && !updateError ? <p>{updateProgress}</p> : null}
+          {updateError ? <p className="update-toast-error">{updateError}</p> : null}
+          <div className="update-toast-actions">
+            <button className="primary-button" onClick={() => void installUpdateNow()} disabled={updateInstalling}>
+              {updateInstalling ? "Installing..." : "Update now"}
+            </button>
+            {updateError ? <button className="ghost-button" onClick={() => void openExternalUrl(releasesUrl)}>Download manually</button> : null}
+            <button className="ghost-button" onClick={dismissUpdateNotice} disabled={updateInstalling}>Later</button>
           </div>
         </div>
       )}

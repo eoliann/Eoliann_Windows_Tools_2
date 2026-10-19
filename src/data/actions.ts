@@ -6,7 +6,7 @@ export const infoActions: ToolAction[] = [
   { id: "systeminfo_cli", title: "systeminfo", description: "Prints detailed Windows system information.", icon: "MonitorCog", category: "Command line", risk: "low" },
   { id: "tasklist", title: "tasklist", description: "Lists active processes.", icon: "ListTree", category: "Command line", risk: "low" },
   { id: "services_running", title: "Running services", description: "Lists running Windows services.", icon: "Activity", category: "Command line", risk: "low" },
-  { id: "installed_apps_report", title: "Installed apps report", description: "Opens a save dialog and exports winget list to a text report.", icon: "PackageSearch", category: "Command line", risk: "low" }
+  { id: "installed_apps_report", title: "Installed apps report", description: "Opens a save dialog and exports winget list to an HTML report.", icon: "PackageSearch", category: "Command line", risk: "low" }
 ];
 
 export const maintenanceActions: ToolAction[] = [
@@ -17,7 +17,7 @@ export const maintenanceActions: ToolAction[] = [
   { id: "disk_cleanup_c", title: "Disk Cleanup C:", description: "Starts Windows Disk Cleanup for the C: drive.", icon: "HardDrive", category: "Cleanup", risk: "low" },
   { id: "disk_cleanup_all", title: "Disk Cleanup all partitions", description: "Starts Disk Cleanup for every fixed drive found.", icon: "DatabaseZap", category: "Cleanup", requiresAdmin: true, risk: "medium" },
   { id: "storage_settings", title: "Open Storage settings", description: "Opens Windows Storage settings.", icon: "FolderCog", category: "Cleanup", risk: "low" },
-  { id: "delete_restore_points", title: "Remove restore points", description: "Deletes system restore points using vssadmin. High impact.", icon: "Trash", category: "Cleanup", requiresAdmin: true, risk: "high" },
+  { id: "delete_restore_points", title: "Remove all restore points", description: "Deletes every restore point through the Windows System Restore API (no vssadmin), one by one. High impact.", icon: "Trash", category: "Cleanup", requiresAdmin: true, risk: "high" },
   { id: "system_restore_cleanup", title: "System Restore cleanup", description: "Opens native Windows System Protection cleanup (Configure/Delete) to remove restore points safely.", icon: "ArchiveRestore", category: "Cleanup", requiresAdmin: true, risk: "medium" },
   { id: "sfc_dism", title: "SFC + DISM repair", description: "Runs DISM RestoreHealth and SFC scan for system integrity.", icon: "Wrench", category: "Repair", requiresAdmin: true, risk: "medium" },
   { id: "network_reset", title: "Network reset", description: "Runs Winsock/IP reset and flushes DNS. Restart recommended.", icon: "Network", category: "Repair", requiresAdmin: true, risk: "high" },
@@ -31,7 +31,6 @@ export const tweakActions: ToolAction[] = [
   { id: "hide_hidden_files", title: "Hide hidden files", description: "Hides hidden files and folders in Explorer.", icon: "EyeOff", category: "Explorer", risk: "low" },
   { id: "show_file_extensions", title: "Show file extensions", description: "Shows file extensions for known file types.", icon: "FileText", category: "Explorer", risk: "low" },
   { id: "hide_file_extensions", title: "Hide file extensions", description: "Hides known file type extensions.", icon: "FileText", category: "Explorer", risk: "low" },
-  { id: "toggle_explorer_tabs", title: "Toggle Explorer tabs", description: "Best-effort toggle for Explorer tab policy/feature state where supported.", icon: "FolderTree", category: "Explorer", requiresAdmin: true, risk: "high" },
 
   { id: "disable_consumer_features", title: "Disable ConsumerFeatures", description: "Prevents suggested apps and consumer content from being provisioned.", icon: "PackageX", category: "Privacy", requiresAdmin: true, risk: "medium" },
   { id: "enable_consumer_features", title: "Enable ConsumerFeatures", description: "Restores consumer feature defaults.", icon: "PackageCheck", category: "Privacy", requiresAdmin: true, risk: "medium" },
@@ -58,7 +57,7 @@ export const tweakActions: ToolAction[] = [
   { id: "adobe_debloat", title: "Adobe Debloat", description: "Stops/disables common Adobe updater and helper services.", icon: "Scissors", category: "Advanced", requiresAdmin: true, risk: "high" },
   { id: "remove_onedrive", title: "Remove OneDrive", description: "Attempts to uninstall OneDrive and move common folders back to user profile.", icon: "CloudOff", category: "Advanced", requiresAdmin: true, risk: "high" },
   { id: "install_onedrive", title: "Install OneDrive", description: "Restores OneDrive using winget.", icon: "Cloud", category: "Advanced", risk: "medium" },
-  { id: "run_ooshutup10", title: "Run O&O ShutUp10++", description: "Downloads the official portable O&O ShutUp10++ package and launches it.", icon: "ShieldAlert", category: "Advanced", requiresAdmin: true, risk: "high" },
+  { id: "run_ooshutup10", title: "Run O&O ShutUp10++", description: "Downloads O&O ShutUp10++ from O&O, verifies its digital signature and launches it.", icon: "ShieldAlert", category: "Advanced", requiresAdmin: true, risk: "high" },
   { id: "time_utc", title: "Set Time to UTC", description: "Useful for Windows/Linux dual boot systems.", icon: "Clock", category: "Dual boot", requiresAdmin: true, risk: "medium" },
   { id: "time_local", title: "Restore Time to Local", description: "Restores Windows default local-time hardware clock behavior.", icon: "Clock3", category: "Dual boot", requiresAdmin: true, risk: "medium" },
   { id: "gpedit_home", title: "Enable gpedit.msc on Home", description: "Installs Group Policy packages available in Windows Home images.", icon: "FileCog", category: "Windows Home", requiresAdmin: true, risk: "high" },
@@ -81,8 +80,10 @@ export const networkActions: ToolAction[] = [
   { id: "set_dns_dns0_kids", title: "dns0.eu KIDS", description: "Sets DNS to dns0.eu KIDS servers.", icon: "Baby", category: "DNS", requiresAdmin: true, risk: "medium" },
   { id: "reset_dns", title: "Reset DNS", description: "Resets DNS servers to DHCP/provider defaults.", icon: "RotateCcw", category: "DNS", requiresAdmin: true, risk: "medium" },
   { id: "network_reset", title: "Network reset", description: "Runs Winsock/IP reset and flushes DNS. Restart recommended.", icon: "Network", category: "Repair", requiresAdmin: true, risk: "high" },
-  { id: "enable_insecure_guest_smb", title: "Enable insecure SMB guest", description: "Allows insecure guest logons and disables SMB signing requirement.", icon: "Unlock", category: "SMB", requiresAdmin: true, risk: "high" },
-  { id: "disable_insecure_guest_smb", title: "Disable insecure SMB guest", description: "Restores safer SMB guest/signing settings.", icon: "Lock", category: "SMB", requiresAdmin: true, risk: "medium" },
+  { id: "enable_insecure_guest_smb", title: "Enable insecure SMB guest", description: "Enables guest auth in both Policies + legacy paths, disables SMB signing requirement and restarts Workstation service.", icon: "Unlock", category: "SMB", requiresAdmin: true, risk: "high" },
+  { id: "disable_insecure_guest_smb", title: "Disable insecure SMB guest", description: "Restores SMB signing requirement, removes guest auth policy values and restarts Workstation service.", icon: "Lock", category: "SMB", requiresAdmin: true, risk: "medium" },
+  { id: "enable_smb1_client", title: "Enable SMB1 client (legacy)", description: "Enables SMB1 optional feature for legacy NAS/devices. Restart required.", icon: "AlertTriangle", category: "SMB", requiresAdmin: true, risk: "high" },
+  { id: "disable_smb1_client", title: "Disable SMB1 client", description: "Disables SMB1 optional feature and restores safer defaults. Restart required.", icon: "ShieldCheck", category: "SMB", requiresAdmin: true, risk: "medium" },
   { id: "tcp_offload_on", title: "Enable TCP offload", description: "Enables TCP task offload in Windows.", icon: "NetworkIcon", category: "Adapter", requiresAdmin: true, risk: "medium" },
   { id: "tcp_offload_off", title: "Disable TCP offload", description: "Disables TCP task offload in Windows.", icon: "NetworkIcon", category: "Adapter", requiresAdmin: true, risk: "medium" }
 ];
@@ -94,7 +95,7 @@ export const healthActions: ToolAction[] = [
   { id: "restore_hibernation_defaults", title: "Restore hibernation defaults", description: "Restores hibernation registry attributes and disables hibernation.", icon: "LaptopMinimal", category: "Power", requiresAdmin: true, risk: "high" },
   { id: "battery_report", title: "Battery report", description: "Asks where to save the Windows battery report, then generates the HTML file there.", icon: "BatteryCharging", category: "Diagnostics", risk: "low" },
   { id: "memory_diagnostic", title: "Memory diagnostic", description: "Launches Windows Memory Diagnostic.", icon: "Cpu", category: "Diagnostics", risk: "low" },
-  { id: "delete_restore_points", title: "Remove restore points", description: "Opens native Windows System Protection cleanup (Configure/Delete) to remove restore points.", icon: "Trash", category: "System Restore", requiresAdmin: true, risk: "medium" },
+  { id: "delete_restore_points", title: "Remove all restore points", description: "Deletes every restore point through the Windows System Restore API (no vssadmin), one by one. To delete a single point use Tools > System restore.", icon: "Trash", category: "System Restore", requiresAdmin: true, risk: "high" },
   { id: "storage_settings", title: "Storage settings", description: "Opens Windows Storage settings.", icon: "Settings", category: "Cleanup", risk: "low" },
   { id: "system_restore_cleanup", title: "System Restore cleanup", description: "Opens native Windows System Protection cleanup (Configure/Delete) to remove restore points safely.", icon: "ArchiveRestore", category: "Cleanup", requiresAdmin: true, risk: "medium" }
 ];
@@ -105,7 +106,7 @@ export const performanceActions: ToolAction[] = [
   { id: "high_performance", title: "High Performance", description: "Switches to the built-in High Performance power plan.", icon: "Gauge", category: "Power Plans", requiresAdmin: true, risk: "medium" },
   { id: "balanced_power", title: "Balanced", description: "Switches back to the default Balanced power plan.", icon: "Scale", category: "Power Plans", risk: "low" },
   { id: "power_saver", title: "Power Saver", description: "Switches to Windows Power Saver plan.", icon: "BatteryLow", category: "Power Plans", risk: "low" },
-  { id: "ultimate_performance", title: "Ultimate Performance plan", description: "Creates/selects Ultimate Performance when supported.", icon: "Zap", category: "Power Plans", requiresAdmin: true, risk: "medium" },
+  { id: "ultimate_performance", title: "Ultimate Performance plan", description: "Adds the Ultimate Performance plan if missing and activates it.", icon: "Zap", category: "Power Plans", requiresAdmin: true, risk: "medium" },
   { id: "disable_sleep", title: "Disable Sleep", description: "Sets sleep timeout to Never (AC/DC).", icon: "Bed", category: "Power Tweaks", requiresAdmin: true, risk: "medium" },
   { id: "disable_monitor_timeout", title: "Disable Monitor timeout", description: "Sets display timeout to Never (AC/DC).", icon: "Monitor", category: "Power Tweaks", requiresAdmin: true, risk: "medium" },
   { id: "disable_hdd_timeout", title: "Disable HDD/SSD timeout", description: "Sets disk timeout to Never (AC/DC).", icon: "HardDrive", category: "Power Tweaks", requiresAdmin: true, risk: "medium" },
@@ -147,8 +148,8 @@ export const customizeActions: ToolAction[] = [
   { id: "numlock_off", title: "NumLock off startup", description: "Clears NumLock startup value.", icon: "KeyboardOff", category: "Features / Tweaks", risk: "low" },
   { id: "taskbar_search_hide", title: "Hide taskbar search", description: "Hides taskbar search button/box.", icon: "SearchX", category: "Taskbar", risk: "low" },
   { id: "taskbar_search_show", title: "Show taskbar search", description: "Shows taskbar search icon.", icon: "Search", category: "Taskbar", risk: "low" },
-  { id: "widgets_off", title: "Disable Widgets", description: "Hides/disables the taskbar Widgets button.", icon: "PanelLeftClose", category: "Taskbar", risk: "low" },
-  { id: "widgets_on", title: "Enable Widgets", description: "Shows/enables the taskbar Widgets button.", icon: "PanelLeftOpen", category: "Taskbar", risk: "low" },
+  { id: "widgets_off", title: "Disable Widgets", description: "Disables Widgets by policy and hides the taskbar button.", icon: "PanelLeftClose", category: "Taskbar", requiresAdmin: true, risk: "low" },
+  { id: "widgets_on", title: "Enable Widgets", description: "Removes the Widgets policy and shows the taskbar button.", icon: "PanelLeftOpen", category: "Taskbar", requiresAdmin: true, risk: "low" },
   { id: "snap_on", title: "Enable Snap Windows", description: "Enables Snap Assist window arrangement.", icon: "PanelTop", category: "Features / Tweaks", risk: "low" },
   { id: "snap_off", title: "Disable Snap Windows", description: "Disables Snap Assist window arrangement.", icon: "PanelTopClose", category: "Features / Tweaks", risk: "low" },
   { id: "sticky_keys_off", title: "Disable Sticky Keys", description: "Prevents Sticky Keys prompts and hotkey behavior.", icon: "Accessibility", category: "Features / Tweaks", risk: "low" },
@@ -172,7 +173,7 @@ export const settingsActions: ToolAction[] = [
 
 export const appActions: ToolAction[] = [
   { id: "winget_upgrade_all", title: "Upgrade all applications", description: "Runs winget upgrade --all with package/source agreements accepted.", icon: "PackageCheck", category: "Winget", risk: "medium" },
-  { id: "reinstall_winget", title: "Reinstall winget", description: "Opens Microsoft Store/App Installer page and attempts winget repair where possible.", icon: "RefreshCcw", category: "Winget", requiresAdmin: true, risk: "medium" }
+  { id: "reinstall_winget", title: "Repair winget", description: "Re-registers App Installer (winget). Opens Microsoft Store if winget is still missing.", icon: "RefreshCcw", category: "Winget", requiresAdmin: true, risk: "medium" }
 ];
 
 export const appCatalog: AppCatalogItem[] = [
@@ -282,7 +283,9 @@ export const appCatalog: AppCatalogItem[] = [
   { id: "Postman.Postman", name: "Postman", category: "Development", description: "API platform." },
   { id: "Pulsar-Edit.Pulsar", name: "Pulsar", category: "Development", description: "Text editor." },
   { id: "JetBrains.PyCharm", name: "PyCharm", category: "Development", description: "Python IDE." },
-  { id: "Python.Python.3.13", name: "Python 3", category: "Development", description: "Python runtime." },
+  { id: "Python.Python.3.12", name: "Python 3.12", category: "Development", description: "Python 3.12 runtime." },
+  { id: "Python.Python.3.13", name: "Python 3.13", category: "Development", description: "Python 3.13 runtime." },
+  { id: "Python.Python.3.14", name: "Python 3.14", category: "Development", description: "Python 3.14 runtime." },
   { id: "JetBrains.RubyMine", name: "RubyMine", category: "Development", description: "Ruby IDE." },
   { id: "Rustlang.Rust.MSVC", name: "Rust", category: "Development", description: "Rust toolchain for MSVC." },
   { id: "SublimeHQ.SublimeText.4", name: "Sublime Text", category: "Development", description: "Text editor." },
@@ -372,44 +375,72 @@ export const appCatalog: AppCatalogItem[] = [
 ];
 
 export const windowsApps: WindowsAppItem[] = [
-  { packageName: "Microsoft.OutlookForWindows", name: "Outlook for Windows", category: "Communication", description: "New Outlook package." },
-  { packageName: "Microsoft.SkypeApp", name: "Skype", category: "Communication", description: "Skype app package." },
-  { packageName: "MSTeams", name: "Teams", category: "Communication", description: "Teams consumer package." },
-  { packageName: "Microsoft.GroupMe10", name: "GroupMe", category: "Communication", description: "GroupMe app." },
-  { packageName: "Microsoft.Todos", name: "Microsoft To Do", category: "Communication", description: "Microsoft To Do package." },
-  { packageName: "Microsoft.YourPhone", name: "Phone Link", category: "Communication", description: "Phone Link app." },
-  { packageName: "Microsoft.CommsPhone", name: "CommsPhone", category: "Communication", description: "Phone communication component." },
-  { packageName: "Microsoft.Messaging", name: "Messaging", category: "Communication", description: "Messaging app." },
-  { packageName: "microsoft.windowscommunicationsapps", name: "Mail & Calendar", category: "Communication", description: "Mail and Calendar app." },
-  { packageName: "Clipchamp.Clipchamp", name: "Clipchamp", category: "Media & Creativity", description: "Microsoft video editor." },
+  // Communication
+  { packageName: "Microsoft.OutlookForWindows", name: "Outlook (new)", category: "Communication", description: "New Outlook for Windows app.", recommended: true },
+  { packageName: "microsoft.windowscommunicationsapps", name: "Mail & Calendar", category: "Communication", description: "Retired Mail and Calendar app.", recommended: true },
+  { packageName: "MSTeams", name: "Microsoft Teams (personal)", category: "Communication", description: "Consumer Teams package.", recommended: true },
+  { packageName: "MicrosoftTeams", name: "Teams Chat (legacy)", category: "Communication", description: "Older Teams chat package from early Windows 11 builds.", recommended: true },
+  { packageName: "Microsoft.SkypeApp", name: "Skype", category: "Communication", description: "Retired Skype app.", recommended: true },
+  { packageName: "Microsoft.People", name: "People", category: "Communication", description: "Legacy contacts app.", recommended: true },
+  { packageName: "Microsoft.GroupMe10", name: "GroupMe", category: "Communication", description: "GroupMe messaging app.", recommended: true },
+  { packageName: "Microsoft.YourPhone", name: "Phone Link", category: "Communication", description: "Connects an Android/iPhone to the PC." },
+  { packageName: "Microsoft.Messaging", name: "Messaging", category: "Communication", description: "Legacy messaging app.", recommended: true },
+
+  // AI & Bing
+  { packageName: "Microsoft.Copilot", name: "Microsoft Copilot", category: "AI & Bing", description: "Copilot app.", recommended: true },
+  { packageName: "Microsoft.BingSearch", name: "Bing Search", category: "AI & Bing", description: "Bing search integration app.", recommended: true },
+  { packageName: "Microsoft.BingNews", name: "Microsoft News", category: "AI & Bing", description: "News app.", recommended: true },
+  { packageName: "Microsoft.BingWeather", name: "Weather", category: "AI & Bing", description: "MSN Weather app.", recommended: true },
+  { packageName: "Microsoft.BingFinance", name: "Money", category: "AI & Bing", description: "MSN Money app.", recommended: true },
+  { packageName: "Microsoft.BingSports", name: "Sports", category: "AI & Bing", description: "MSN Sports app.", recommended: true },
+  { packageName: "Microsoft.549981C3F5F10", name: "Cortana", category: "AI & Bing", description: "Discontinued Cortana app.", recommended: true },
+
+  // Productivity
+  { packageName: "Microsoft.MicrosoftOfficeHub", name: "Microsoft 365 (Office) hub", category: "Productivity", description: "Office/Microsoft 365 launcher app.", recommended: true },
+  { packageName: "Microsoft.Office.OneNote", name: "OneNote (Store)", category: "Productivity", description: "OneNote for Windows 10 package." },
+  { packageName: "Microsoft.Office.Sway", name: "Sway", category: "Productivity", description: "Sway app.", recommended: true },
+  { packageName: "Microsoft.Todos", name: "Microsoft To Do", category: "Productivity", description: "To Do task list app.", recommended: true },
+  { packageName: "Microsoft.MicrosoftJournal", name: "Journal", category: "Productivity", description: "Microsoft Journal inking app.", recommended: true },
+  { packageName: "Microsoft.PowerAutomateDesktop", name: "Power Automate", category: "Productivity", description: "Power Automate Desktop.", recommended: true },
+  { packageName: "Microsoft.MicrosoftStickyNotes", name: "Sticky Notes", category: "Productivity", description: "Sticky Notes app." },
+  { packageName: "Microsoft.Windows.DevHome", name: "Dev Home", category: "Productivity", description: "Retired Dev Home app.", recommended: true },
+
+  // Media & Creativity
+  { packageName: "Clipchamp.Clipchamp", name: "Clipchamp", category: "Media & Creativity", description: "Clipchamp video editor.", familyName: "Clipchamp.Clipchamp_yxz26nhyzhsrt", recommended: true },
+  { packageName: "Microsoft.ZuneVideo", name: "Films & TV", category: "Media & Creativity", description: "Movies & TV app.", recommended: true },
+  { packageName: "Microsoft.ZuneMusic", name: "Media Player", category: "Media & Creativity", description: "Windows Media Player (Groove successor)." },
   { packageName: "Microsoft.WindowsCamera", name: "Camera", category: "Media & Creativity", description: "Windows Camera app." },
-  { packageName: "Microsoft.Paint", name: "Paint", category: "Media & Creativity", description: "Microsoft Paint package where present." },
-  { packageName: "Microsoft.MSPaint", name: "MS Paint legacy package", category: "Media & Creativity", description: "MS Paint Store package on older images." },
-  { packageName: "Microsoft.3DBuilder", name: "3D Builder", category: "Media & Creativity", description: "3D Builder app." },
-  { packageName: "Microsoft.Microsoft3DViewer", name: "3D Viewer", category: "Media & Creativity", description: "3D Viewer app." },
-  { packageName: "Microsoft.MixedReality.Portal", name: "Mixed Reality Portal", category: "Media & Creativity", description: "Mixed Reality Portal." },
-  { packageName: "Microsoft.MicrosoftOfficeHub", name: "Office Hub", category: "Microsoft Apps", description: "Microsoft Office hub app." },
-  { packageName: "Microsoft.Office.OneNote", name: "OneNote", category: "Microsoft Apps", description: "OneNote Store package." },
-  { packageName: "Microsoft.Office.Sway", name: "Sway", category: "Microsoft Apps", description: "Sway package." },
-  { packageName: "Microsoft.MicrosoftStickyNotes", name: "Sticky Notes", category: "Microsoft Apps", description: "Sticky Notes app." },
-  { packageName: "MicrosoftCorporationII.MicrosoftFamily", name: "Family Safety", category: "Microsoft Apps", description: "Microsoft Family Safety." },
-  { packageName: "Microsoft.BingWeather", name: "Bing Weather", category: "Bing Apps", description: "Default weather app." },
-  { packageName: "Microsoft.BingNews", name: "Bing News", category: "Bing Apps", description: "Default news app." },
-  { packageName: "Microsoft.BingFinance", name: "Bing Finance", category: "Bing Apps", description: "Default finance app." },
-  { packageName: "Microsoft.BingSports", name: "Bing Sports", category: "Bing Apps", description: "Default sports app." },
-  { packageName: "Microsoft.MicrosoftSolitaireCollection", name: "Solitaire Collection", category: "Games", description: "Microsoft Solitaire game package." },
-  { packageName: "Microsoft.MinecraftUWP", name: "Minecraft for Windows", category: "Games", description: "Minecraft UWP package where present." },
-  { packageName: "Microsoft.People", name: "People", category: "System & Misc", description: "People contacts app." },
-  { packageName: "Microsoft.WindowsMaps", name: "Maps", category: "System & Misc", description: "Microsoft Maps." },
-  { packageName: "Microsoft.Wallet", name: "Wallet", category: "System & Misc", description: "Microsoft Wallet." },
-  { packageName: "Microsoft.Getstarted", name: "Get Started", category: "System & Misc", description: "Windows onboarding app." },
-  { packageName: "Microsoft.WindowsFeedbackHub", name: "Feedback Hub", category: "System & Misc", description: "Windows Feedback Hub." },
-  { packageName: "Microsoft.WindowsAlarms", name: "Alarms & Clock", category: "System & Misc", description: "Clock app." },
-  { packageName: "Microsoft.OneConnect", name: "OneConnect", category: "System & Misc", description: "OneConnect package." },
-  { packageName: "Microsoft.WindowsPhone", name: "Windows Phone", category: "System & Misc", description: "Windows Phone package." },
-  { packageName: "Microsoft.WindowsSoundRecorder", name: "Voice Recorder", category: "System & Misc", description: "Voice Recorder app." },
-  { packageName: "Microsoft.Print3D", name: "Print 3D", category: "Other", description: "Print 3D app." },
-  { packageName: "Microsoft.549981C3F5F10", name: "Cortana/Search app stub", category: "Other", description: "Microsoft app stub present on some Windows builds." }
+  { packageName: "Microsoft.Paint", name: "Paint", category: "Media & Creativity", description: "Microsoft Paint." },
+  { packageName: "Microsoft.WindowsSoundRecorder", name: "Sound Recorder", category: "Media & Creativity", description: "Sound Recorder app." },
+  { packageName: "Microsoft.3DBuilder", name: "3D Builder", category: "Media & Creativity", description: "3D Builder app.", recommended: true },
+  { packageName: "Microsoft.Microsoft3DViewer", name: "3D Viewer", category: "Media & Creativity", description: "3D Viewer app.", recommended: true },
+  { packageName: "Microsoft.Print3D", name: "Print 3D", category: "Media & Creativity", description: "Print 3D app.", recommended: true },
+  { packageName: "Microsoft.MixedReality.Portal", name: "Mixed Reality Portal", category: "Media & Creativity", description: "Windows Mixed Reality portal.", recommended: true },
+
+  // Games & Xbox
+  { packageName: "Microsoft.MicrosoftSolitaireCollection", name: "Solitaire Collection", category: "Games & Xbox", description: "Microsoft Solitaire with ads.", recommended: true },
+  { packageName: "Microsoft.GamingApp", name: "Xbox app", category: "Games & Xbox", description: "Xbox PC app (Game Pass, store)." },
+  { packageName: "Microsoft.XboxGamingOverlay", name: "Xbox Game Bar", category: "Games & Xbox", description: "Win+G overlay. Needed for game capture." },
+  { packageName: "Microsoft.XboxSpeechToTextOverlay", name: "Xbox speech-to-text overlay", category: "Games & Xbox", description: "Game Bar accessibility overlay." },
+  { packageName: "Microsoft.Edge.GameAssist", name: "Edge Game Assist", category: "Games & Xbox", description: "In-game Edge browser overlay.", recommended: true },
+  { packageName: "Microsoft.MinecraftUWP", name: "Minecraft for Windows", category: "Games & Xbox", description: "Minecraft UWP package where present." },
+
+  // Promoted third-party apps
+  { packageName: "SpotifyAB.SpotifyMusic", name: "Spotify", category: "Promoted apps", description: "Pre-pinned/preinstalled Spotify.", familyName: "SpotifyAB.SpotifyMusic_zpdnekdrzrea0", recommended: true },
+  { packageName: "7EE7776C.LinkedInforWindows", name: "LinkedIn", category: "Promoted apps", description: "LinkedIn app promotion.", familyName: "7EE7776C.LinkedInforWindows_w1wdnht996qgy", recommended: true },
+  { packageName: "Disney.37853FC22B2CE", name: "Disney+", category: "Promoted apps", description: "Disney+ app promotion.", familyName: "Disney.37853FC22B2CE_6rarf9sa4v8jt", recommended: true },
+
+  // System & Misc
+  { packageName: "Microsoft.Getstarted", name: "Tips", category: "System & Misc", description: "Windows Tips/Get Started app.", recommended: true },
+  { packageName: "Microsoft.GetHelp", name: "Get Help", category: "System & Misc", description: "Microsoft support app.", recommended: true },
+  { packageName: "Microsoft.WindowsFeedbackHub", name: "Feedback Hub", category: "System & Misc", description: "Windows Feedback Hub.", recommended: true },
+  { packageName: "Microsoft.WindowsMaps", name: "Maps", category: "System & Misc", description: "Retired Windows Maps app.", recommended: true },
+  { packageName: "MicrosoftCorporationII.MicrosoftFamily", name: "Family Safety", category: "System & Misc", description: "Microsoft Family Safety.", recommended: true },
+  { packageName: "Microsoft.Wallet", name: "Wallet", category: "System & Misc", description: "Microsoft Wallet.", recommended: true },
+  { packageName: "Microsoft.OneConnect", name: "Mobile Plans", category: "System & Misc", description: "Paid Wi-Fi & Cellular app.", recommended: true },
+  { packageName: "Microsoft.WindowsAlarms", name: "Clock", category: "System & Misc", description: "Alarms & Clock app." },
+  { packageName: "MicrosoftCorporationII.QuickAssist", name: "Quick Assist", category: "System & Misc", description: "Remote help tool. Keep it if you receive remote support." },
+  { packageName: "MicrosoftWindows.Client.WebExperience", name: "Widgets", category: "System & Misc", description: "Widgets board and lock-screen weather.", familyName: "MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy" }
 ];
 
 

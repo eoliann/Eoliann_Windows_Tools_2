@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { DiskHealth, RestorePointsSummary, SystemOverview } from "../types";
+import type { DiskHealth, RestorePointsSummary, SmbGuestStatus, SystemOverview, WindowsAppsStatus, WindowsAppTarget } from "../types";
 
 export async function getSystemOverview(): Promise<SystemOverview> {
   return invoke<SystemOverview>("get_system_overview");
@@ -17,8 +17,16 @@ export async function wingetAction(operation: "install" | "uninstall" | "upgrade
   return invoke<string>("winget_action", { operation, packageIds });
 }
 
-export async function removeWindowsApp(packageName: string): Promise<string> {
-  return invoke<string>("remove_windows_app", { packageName });
+export async function removeWindowsApps(targets: WindowsAppTarget[]): Promise<string> {
+  return invoke<string>("remove_windows_apps", { targets });
+}
+
+export async function restoreDeprovisionedApp(familyName: string): Promise<string> {
+  return invoke<string>("restore_deprovisioned_app", { familyName });
+}
+
+export async function getWindowsAppsStatus(): Promise<WindowsAppsStatus> {
+  return invoke<WindowsAppsStatus>("get_windows_apps_status");
 }
 
 export async function openSystemTool(toolId: string): Promise<string> {
@@ -27,10 +35,6 @@ export async function openSystemTool(toolId: string): Promise<string> {
 
 export async function getInstalledApps(): Promise<string> {
   return invoke<string>("get_installed_apps");
-}
-
-export async function getInstalledWindowsApps(): Promise<string[]> {
-  return invoke<string[]>("get_installed_windows_apps");
 }
 
 export async function openExternalUrl(url: string): Promise<string> {
@@ -53,10 +57,10 @@ export async function getRestorePoints(): Promise<RestorePointsSummary> {
   return invoke<RestorePointsSummary>("get_restore_points");
 }
 
-export async function deleteRestorePoint(shadowId: string): Promise<string> {
-  return invoke<string>("delete_restore_point", { shadowId });
+export async function deleteRestorePoint(sequenceNumber: number): Promise<string> {
+  return invoke<string>("delete_restore_point_by_info", { args: { sequenceNumber } });
 }
 
-export async function deleteRestorePointByInfo(shadowId: string, sequenceNumber: number): Promise<string> {
-  return invoke<string>("delete_restore_point_by_info", { args: { shadowId, sequenceNumber } });
+export async function getSmbGuestStatus(): Promise<SmbGuestStatus> {
+  return invoke<SmbGuestStatus>("get_smb_guest_status");
 }

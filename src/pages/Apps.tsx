@@ -1,4 +1,4 @@
-import { Download, PackageCheck, RefreshCw, Search, Trash2 } from "lucide-react";
+import { ChevronDown, Download, PackageCheck, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ActionGrid from "../components/ActionGrid";
 import { appActions, appCatalog } from "../data/actions";
@@ -129,30 +129,33 @@ export default function Apps({ running, runningId, onRun, onInstall, onUninstall
       </section>
 
       <section className="content-section">
-        <div className="section-heading">
-          <h2>Chrome extensions</h2>
-          <span>Select and install</span>
-        </div>
-        <div className="extensions-links">
-          {chromeExtensions.map((extension) => (
-            <label key={extension.id} className="catalog-item">
-              <input
-                type="checkbox"
-                checked={selectedExts.has(extension.id)}
-                onChange={() => {
-                  setSelectedExts((prev) => {
-                    const next = new Set(prev);
-                    next.has(extension.id) ? next.delete(extension.id) : next.add(extension.id);
-                    return next;
-                  });
-                }}
-              />
-              <div><strong>{extension.name}</strong><code>{extension.id}</code></div>
-            </label>
-          ))}
-        </div>
-        <button className="primary-button" onClick={installSelectedExtensions} disabled={!selectedExts.size}>Install selected extensions</button>
-        {extensionsOutput && <p className="notice">{extensionsOutput}</p>}
+        <details className="accordion-card">
+          <summary className="accordion-summary">
+            <span><strong>Chrome extensions</strong> <span>({selectedExts.size} selected)</span></span>
+            <ChevronDown size={16} className="accordion-chevron" />
+          </summary>
+          <p className="notice">Select and install</p>
+          <div className="extensions-links">
+            {chromeExtensions.map((extension) => (
+              <label key={extension.id} className="catalog-item">
+                <input
+                  type="checkbox"
+                  checked={selectedExts.has(extension.id)}
+                  onChange={() => {
+                    setSelectedExts((prev) => {
+                      const next = new Set(prev);
+                      next.has(extension.id) ? next.delete(extension.id) : next.add(extension.id);
+                      return next;
+                    });
+                  }}
+                />
+                <div><strong>{extension.name}</strong><code>{extension.id}</code></div>
+              </label>
+            ))}
+          </div>
+          <button className="primary-button" onClick={installSelectedExtensions} disabled={!selectedExts.size}>Install selected extensions</button>
+          {extensionsOutput && <p className="notice">{extensionsOutput}</p>}
+        </details>
       </section>
 
       <section className="content-section">

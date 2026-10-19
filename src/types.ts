@@ -45,6 +45,14 @@ export interface RestorePointsSummary {
   points: RestorePointInfo[];
 }
 
+export interface SmbGuestStatus {
+  enable_insecure_guest_logons?: boolean | null;
+  require_security_signature?: boolean | null;
+  policy_allow_insecure_guest_auth?: number | null;
+  legacy_allow_insecure_guest_auth?: number | null;
+  smb1_enabled?: boolean | null;
+}
+
 export type PageId =
   | "dashboard"
   | "info"
@@ -85,4 +93,25 @@ export interface WindowsAppItem {
   name: string;
   category: string;
   description: string;
+  /** Package family name, when the publisher is not Microsoft's 8wekyb3d8bbwe. */
+  familyName?: string;
+  /** Part of the "rarely used apps" preset. */
+  recommended?: boolean;
+}
+
+export interface WindowsAppTarget {
+  packageName: string;
+  familyName?: string;
+}
+
+export interface WindowsAppPackage {
+  name: string;
+  family_name: string;
+  installed: boolean;
+  provisioned: boolean;
+}
+
+export interface WindowsAppsStatus {
+  packages: WindowsAppPackage[];
+  deprovisioned: string[];
 }

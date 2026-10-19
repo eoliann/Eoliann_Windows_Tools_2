@@ -88,6 +88,15 @@ pub struct WingetProgressEvent {
     pub message: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SmbGuestStatus {
+    pub enable_insecure_guest_logons: Option<bool>,
+    pub require_security_signature: Option<bool>,
+    pub policy_allow_insecure_guest_auth: Option<i64>,
+    pub legacy_allow_insecure_guest_auth: Option<i64>,
+    pub smb1_enabled: Option<bool>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct PsRestorePointInfo {
@@ -97,11 +106,41 @@ struct PsRestorePointInfo {
     pub creation_time: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct WindowsAppPackage {
+    pub name: String,
+    pub family_name: String,
+    pub installed: bool,
+    pub provisioned: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WindowsAppsStatus {
+    pub packages: Vec<WindowsAppPackage>,
+    pub deprovisioned: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowsAppTarget {
+    pub package_name: String,
+    pub family_name: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-struct PsRestorePointsSummary {
-    pub total_used_space_gb: Option<f64>,
-    pub points: Option<Vec<PsRestorePointInfo>>,
+struct PsWindowsAppPackage {
+    pub name: Option<String>,
+    pub family_name: Option<String>,
+    pub installed: Option<bool>,
+    pub provisioned: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct PsWindowsAppsStatus {
+    pub packages: Option<Vec<PsWindowsAppPackage>>,
+    pub deprovisioned: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -151,11 +190,6 @@ pub async fn winget_action(operation: String, package_ids: Vec<String>) -> Resul
 }
 
 #[tauri::command]
-pub async fn remove_windows_app(package_name: String) -> Result<String, String> {
-    run_blocking(move || remove_windows_app_sync(package_name)).await
-}
-
-#[tauri::command]
 pub async fn open_system_tool(tool_id: String) -> Result<String, String> {
     run_blocking(move || open_system_tool_sync(tool_id)).await
 }
@@ -185,21 +219,20 @@ pub async fn get_restore_points() -> Result<RestorePointsSummary, String> {
     run_blocking(get_restore_points_sync).await
 }
 
-#[tauri::command]
-pub async fn delete_restore_point(shadow_id: String) -> Result<String, String> {
-    run_blocking(move || delete_restore_point_sync(shadow_id)).await
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteRestorePointArgs {
-    pub shadow_id: Option<String>,
     pub sequence_number: Option<i64>,
 }
 
 #[tauri::command]
 pub async fn delete_restore_point_by_info(args: DeleteRestorePointArgs) -> Result<String, String> {
     run_blocking(move || delete_restore_point_by_info_sync(args)).await
+}
+
+#[tauri::command]
+pub async fn get_smb_guest_status() -> Result<SmbGuestStatus, String> {
+    run_blocking(get_smb_guest_status_sync).await
 }
 
 fn args(values: &[&str]) -> Vec<String> {
@@ -339,12 +372,18 @@ fn winget_upgrade_all_progress_sync(app: tauri::AppHandle) -> Result<String, Str
     }
 }
 
+// `New-Item <key> -Force` wipes every value and subkey of an existing registry key,
+// so scripts must use Ensure-Key to create a key only when it is missing.
+const PS_PRELUDE: &str = "function Ensure-Key([string]$Path) { if (-not (Test-Path -LiteralPath $Path)) { New-Item -Path $Path -Force | Out-Null } }\n";
+
 fn powershell(script: &str) -> Result<String, String> {
-    command_output("powershell", &args(&["-NoProfile", "-NonInteractive", "-Command", script]))
+    let full = format!("{PS_PRELUDE}{script}");
+    command_output("powershell", &args(&["-NoProfile", "-NonInteractive", "-Command", &full]))
 }
 
 fn powershell_sta(script: &str) -> Result<String, String> {
-    command_output("powershell", &args(&["-NoProfile", "-STA", "-Command", script]))
+    let full = format!("{PS_PRELUDE}{script}");
+    command_output("powershell", &args(&["-NoProfile", "-STA", "-Command", &full]))
 }
 
 fn cmd_shell(command: &str) -> Result<String, String> {
@@ -556,7 +595,7 @@ fn set_run_at_startup(enable: bool) -> Result<String, String> {
         powershell(&format!(r#"
 $ErrorActionPreference = 'Stop'
 $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-New-Item -Path $run -Force | Out-Null
+Ensure-Key $run
 Set-ItemProperty -Path $run -Name 'Eoliann Windows Tools' -Value '"{}"'
 'Start with Windows enabled.'
 "#, exe_str))
@@ -613,14 +652,95 @@ Add-Type -AssemblyName System.Windows.Forms
 $dialog = New-Object System.Windows.Forms.SaveFileDialog
 $dialog.Title = 'Save installed apps report'
 $dialog.InitialDirectory = [Environment]::GetFolderPath('MyDocuments')
-$dialog.FileName = 'ewt-installed-apps-report.txt'
-$dialog.Filter = 'Text files (*.txt)|*.txt|All files (*.*)|*.*'
+$dialog.FileName = 'ewt-installed-apps-report.html'
+$dialog.Filter = 'HTML files (*.html)|*.html|All files (*.*)|*.*'
 $result = $dialog.ShowDialog()
 if ($result -ne [System.Windows.Forms.DialogResult]::OK) { 'Installed apps report cancelled by user.'; exit 0 }
 $path = $dialog.FileName
-$report = winget list | Out-String
-if (-not $report -or [string]::IsNullOrWhiteSpace($report)) { throw 'winget did not return any output.' }
-Set-Content -Path $path -Value $report -Encoding UTF8
+$lines = winget list 2>&1
+if (-not $lines -or $lines.Count -eq 0) { throw 'winget did not return any output.' }
+
+$headerIndex = -1
+for ($i = 0; $i -lt $lines.Count; $i++) {
+  if ($lines[$i] -match '^\s*Name\s{2,}Id\s{2,}Version\s{2,}Available\s{2,}Source\s*$') {
+    $headerIndex = $i
+    break
+  }
+}
+
+$rows = New-Object System.Collections.Generic.List[object]
+if ($headerIndex -ge 0) {
+  for ($i = $headerIndex + 2; $i -lt $lines.Count; $i++) {
+    $line = [string]$lines[$i]
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    if ($line -match '^\s*-{3,}') { continue }
+    $parts = $line.TrimEnd() -split '\s{2,}'
+    if ($parts.Count -lt 2) { continue }
+
+    $name = if ($parts.Count -ge 1) { $parts[0] } else { '' }
+    $id = if ($parts.Count -ge 2) { $parts[1] } else { '' }
+    $version = if ($parts.Count -ge 3) { $parts[2] } else { '' }
+    $available = if ($parts.Count -ge 4) { $parts[3] } else { '' }
+    $source = if ($parts.Count -ge 5) { $parts[4] } else { '' }
+
+    $rows.Add([PSCustomObject]@{
+      Name = $name
+      Id = $id
+      Version = $version
+      Available = $available
+      Source = $source
+    }) | Out-Null
+  }
+}
+
+$tableRows = if ($rows.Count -gt 0) {
+  ($rows | ForEach-Object {
+    '<tr><td>' + [System.Net.WebUtility]::HtmlEncode($_.Name) + '</td><td>' + [System.Net.WebUtility]::HtmlEncode($_.Id) + '</td><td>' + [System.Net.WebUtility]::HtmlEncode($_.Version) + '</td><td>' + [System.Net.WebUtility]::HtmlEncode($_.Available) + '</td><td>' + [System.Net.WebUtility]::HtmlEncode($_.Source) + '</td></tr>'
+  }) -join "`n"
+} else {
+  ''
+}
+
+$rawText = [System.Net.WebUtility]::HtmlEncode(($lines -join "`r`n"))
+$generated = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+$html = @"
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EWT Installed Apps Report</title>
+  <style>
+    body { font-family: Segoe UI, Arial, sans-serif; background: #f7f8fa; color: #111; margin: 0; padding: 24px; }
+    .card { max-width: 1100px; margin: 0 auto; background: #fff; border: 1px solid #e4e7ec; border-radius: 10px; padding: 20px; }
+    h1 { margin: 0 0 8px; font-size: 22px; }
+    p { margin: 0 0 16px; color: #4a5565; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 20px; }
+    th, td { border: 1px solid #d9dee6; padding: 8px 10px; text-align: left; font-size: 13px; }
+    th { background: #eef2f7; }
+    pre { margin: 0; white-space: pre-wrap; word-wrap: break-word; background: #0f172a; color: #e2e8f0; padding: 14px; border-radius: 8px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Installed Apps Report</h1>
+    <p>Generated by Eoliann Windows Tools on $generated</p>
+    <p>Total detected entries: $($rows.Count)</p>
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Id</th><th>Version</th><th>Available</th><th>Source</th></tr>
+      </thead>
+      <tbody>
+$tableRows
+      </tbody>
+    </table>
+    <h2>Raw winget output</h2>
+    <pre>$rawText</pre>
+  </div>
+</body>
+</html>
+"@
+Set-Content -Path $path -Value $html -Encoding UTF8
 if (Test-Path $path) { "Installed apps report saved to: $path" } else { throw "Report was not created at: $path" }
 "#)
 }
@@ -633,29 +753,80 @@ Start-Process SystemPropertiesProtection.exe
 }
 
 fn create_restore_point_sync() -> Result<String, String> {
-    let wmic_try = cmd_shell(r#"wmic /Namespace:\\root\default Path SystemRestore Call CreateRestorePoint "Eoliann Windows Tools", 100, 7"#);
-    if let Ok(output) = wmic_try {
-        if output.contains("ReturnValue = 0") || output.contains("ReturnValue=0") {
-            return Ok("Restore point created successfully.".into());
-        }
-    }
-
+    // Windows silently skips Checkpoint-Computer when another restore point was created in the
+    // last 24 hours, so the frequency limit is lifted temporarily and the result is verified.
     powershell(r#"
 $ErrorActionPreference = 'Stop'
+$key = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore'
 Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
-$job = Start-Job -ScriptBlock {
-  Checkpoint-Computer -Description 'Eoliann Windows Tools' -RestorePointType 'MODIFY_SETTINGS' -ErrorAction Stop
+$before = [int64](Get-ComputerRestorePoint -ErrorAction SilentlyContinue | Measure-Object -Property SequenceNumber -Maximum).Maximum
+$previous = (Get-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue).SystemRestorePointCreationFrequency
+Set-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -Value 0 -Type DWord
+try {
+  $job = Start-Job -ScriptBlock {
+    Checkpoint-Computer -Description 'Eoliann Windows Tools' -RestorePointType 'MODIFY_SETTINGS' -ErrorAction Stop -WarningAction SilentlyContinue
+  }
+  if (-not (Wait-Job $job -Timeout 180)) {
+    Stop-Job $job -ErrorAction SilentlyContinue
+    Remove-Job $job -Force -ErrorAction SilentlyContinue
+    throw 'Create restore point timed out after 180 seconds.'
+  }
+  Receive-Job $job -ErrorAction Stop | Out-Null
+  Remove-Job $job -Force -ErrorAction SilentlyContinue
+} finally {
+  if ($null -eq $previous) { Remove-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue }
+  else { Set-ItemProperty -Path $key -Name SystemRestorePointCreationFrequency -Value $previous -Type DWord }
 }
-if (Wait-Job $job -Timeout 180) {
-  Receive-Job $job | Out-Null
-  Remove-Job $job -Force | Out-Null
-  'Restore point requested.'
-} else {
-  Stop-Job $job -Force -ErrorAction SilentlyContinue
-  Remove-Job $job -Force -ErrorAction SilentlyContinue | Out-Null
-  throw 'Create restore point timed out after 180 seconds.'
-}
+$after = [int64](Get-ComputerRestorePoint -ErrorAction SilentlyContinue | Measure-Object -Property SequenceNumber -Maximum).Maximum
+if ($after -gt $before) { "Restore point created successfully (#$after)." }
+else { throw 'Windows did not create a new restore point. Make sure System Protection is turned on for the system drive.' }
 "#)
+}
+
+#[cfg(windows)]
+mod system_restore {
+    use std::ffi::c_void;
+
+    extern "system" {
+        fn LoadLibraryW(name: *const u16) -> *mut c_void;
+        fn GetProcAddress(module: *mut c_void, name: *const u8) -> *mut c_void;
+        fn FreeLibrary(module: *mut c_void) -> i32;
+    }
+
+    type SrRemoveRestorePoint = unsafe extern "system" fn(u32) -> u32;
+
+    /// Deletes one restore point through the documented System Restore API (srclient.dll), the
+    /// same path used by the Windows System Protection dialog. Unlike `vssadmin delete shadows`,
+    /// this is not treated as ransomware-style shadow copy wiping by antivirus products.
+    pub fn remove_restore_point(sequence_number: u32) -> Result<(), String> {
+        let library: Vec<u16> = "srclient.dll".encode_utf16().chain(Some(0)).collect();
+        unsafe {
+            let module = LoadLibraryW(library.as_ptr());
+            if module.is_null() {
+                return Err("System Restore client (srclient.dll) is not available on this system.".into());
+            }
+            let proc = GetProcAddress(module, b"SRRemoveRestorePoint\0".as_ptr());
+            if proc.is_null() {
+                FreeLibrary(module);
+                return Err("SRRemoveRestorePoint was not found in srclient.dll.".into());
+            }
+            let remove: SrRemoveRestorePoint = std::mem::transmute(proc);
+            let code = remove(sequence_number);
+            FreeLibrary(module);
+            if code == 0 {
+                Ok(())
+            } else {
+                Err(format!("Windows could not delete restore point #{sequence_number} (error {code})."))
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+mod system_restore {
+    pub fn remove_restore_point(_sequence_number: u32) -> Result<(), String> {
+        Err("System Restore is only available on Windows.".into())
+    }
 }
 
 fn parse_used_shadow_storage_gb(raw: &str) -> Option<f64> {
@@ -687,104 +858,58 @@ fn parse_used_shadow_storage_gb(raw: &str) -> Option<f64> {
     None
 }
 
+fn list_restore_points() -> Result<Vec<RestorePointInfo>, String> {
+    let json = powershell(r#"
+$ErrorActionPreference = 'SilentlyContinue'
+$points = @(Get-ComputerRestorePoint | Sort-Object SequenceNumber -Descending | ForEach-Object {
+  $point = $_
+  $created = [string]$point.CreationTime
+  try { $created = [Management.ManagementDateTimeConverter]::ToDateTime($point.CreationTime).ToString('yyyy-MM-dd HH:mm:ss') } catch { }
+  [PSCustomObject]@{
+    ShadowId = ''
+    SequenceNumber = [int64]$point.SequenceNumber
+    Description = [string]$point.Description
+    CreationTime = $created
+  }
+})
+ConvertTo-Json -InputObject $points -Depth 4 -Compress
+"#)?;
+    if json.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let raw: Vec<PsRestorePointInfo> = serde_json::from_str(json.trim())
+        .map_err(|error| format!("Failed to parse restore points JSON: {error}\n{json}"))?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|point| {
+            let sequence_number = point.sequence_number.filter(|value| *value > 0)?;
+            Some(RestorePointInfo {
+                shadow_id: point.shadow_id.unwrap_or_default(),
+                sequence_number,
+                description: point.description.filter(|text| !text.trim().is_empty()).unwrap_or_else(|| "System restore point".into()),
+                creation_time: point.creation_time.unwrap_or_else(|| "Unknown".into()),
+            })
+        })
+        .collect())
+}
+
 fn get_restore_points_sync() -> Result<RestorePointsSummary, String> {
     if !is_admin() {
         return Err("Administrator privileges are required to read restore points. Please run Eoliann Windows Tools as Administrator.".into());
     }
 
-    let json = powershell(r#"
-$ErrorActionPreference = 'SilentlyContinue'
-$used = 0
-$storageText = (vssadmin list shadowstorage | Out-String)
-$lineWithUnit = ($storageText -split "`r?`n" | Where-Object {
-  $_ -match '(?i)Used Shadow Copy Storage space'
-} | Select-Object -First 1)
-if ($lineWithUnit) {
-  $m = [regex]::Match($lineWithUnit, '([0-9\.,\s]+)\s*(TB|GB|MB|KB|B)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-  if ($m.Success) {
-    $n = ($m.Groups[1].Value -replace '[^0-9\.,]', '').Trim()
-    $n = $n -replace ',', '.'
-    $value = 0.0
-    if ([double]::TryParse($n, [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$value)) {
-      $unit = $m.Groups[2].Value.ToUpperInvariant()
-      switch ($unit) {
-        'TB' { $used = $value * 1TB }
-        'GB' { $used = $value * 1GB }
-        'MB' { $used = $value * 1MB }
-        'KB' { $used = $value * 1KB }
-        default { $used = $value }
-      }
-    }
-  }
-}
-
-if (-not $used -or $used -eq 0) {
-  $used = (Get-CimInstance Win32_ShadowStorage -ErrorAction SilentlyContinue | Measure-Object -Property UsedSpace -Sum).Sum
-  if (-not $used) { $used = 0 }
-}
-$restorePoints = @(Get-ComputerRestorePoint -ErrorAction SilentlyContinue | Sort-Object SequenceNumber -Descending)
-$shadowCopies = @(Get-CimInstance Win32_ShadowCopy -ErrorAction SilentlyContinue | Sort-Object InstallDate -Descending)
-
-$points = @()
-foreach ($sc in $shadowCopies) {
-  $created = try { [Management.ManagementDateTimeConverter]::ToDateTime($sc.InstallDate) } catch { $null }
-  $createdText = if ($created) { $created.ToString('yyyy-MM-dd HH:mm:ss') } else { [string]$sc.InstallDate }
-  $match = $null
-  if ($created) {
-    $match = $restorePoints | Where-Object {
-      try {
-        $rpTime = [Management.ManagementDateTimeConverter]::ToDateTime($_.CreationTime)
-        [math]::Abs(($created - $rpTime).TotalMinutes) -le 5
-      } catch { $false }
-    } | Select-Object -First 1
-  }
-  $points += [PSCustomObject]@{
-    ShadowId = [string]$sc.ID
-    SequenceNumber = if ($match) { [int64]$match.SequenceNumber } else { 0 }
-    Description = if ($match -and -not [string]::IsNullOrWhiteSpace([string]$match.Description)) { [string]$match.Description } else { 'System restore point' }
-    CreationTime = $createdText
-  }
-}
-
-[PSCustomObject]@{
-  TotalUsedSpaceGB = [math]::Round(([double]$used / 1GB), 2)
-  Points = $points
-} | ConvertTo-Json -Depth 5 -Compress
-"#)?;
-
-    let parsed: PsRestorePointsSummary = serde_json::from_str(&json)
-        .map_err(|error| format!("Failed to parse restore points JSON: {error}\n{json}"))?;
-
+    let points = list_restore_points()?;
     let used_from_vssadmin = command_output("vssadmin", &args(&["list", "shadowstorage"]))
         .ok()
         .and_then(|raw| parse_used_shadow_storage_gb(&raw));
-
-    let points = parsed
-        .points
-        .unwrap_or_default()
-        .into_iter()
-        .enumerate()
-        .map(|(index, point)| RestorePointInfo {
-            shadow_id: point.shadow_id.unwrap_or_default(),
-            sequence_number: point.sequence_number.unwrap_or((index + 1) as i64),
-            description: point.description.unwrap_or_else(|| "Shadow copy".into()),
-            creation_time: point.creation_time.unwrap_or_else(|| "Unknown".into()),
-        })
-        .collect();
+    let used_from_wmi = powershell("[math]::Round(((Get-CimInstance Win32_ShadowStorage -ErrorAction SilentlyContinue | Measure-Object -Property UsedSpace -Sum).Sum / 1GB), 2)")
+        .ok()
+        .and_then(|raw| raw.trim().replace(',', ".").parse::<f64>().ok());
 
     Ok(RestorePointsSummary {
-        total_used_space_gb: used_from_vssadmin.unwrap_or(parsed.total_used_space_gb.unwrap_or(0.0)),
+        total_used_space_gb: used_from_vssadmin.or(used_from_wmi).unwrap_or(0.0),
         points,
     })
-}
-
-fn delete_restore_point_sync(shadow_id: String) -> Result<String, String> {
-    if shadow_id.trim().is_empty() {
-        return Err("Missing shadow copy ID.".into());
-    }
-
-    command_output("vssadmin", &args(&["delete", "shadows", &format!("/shadow={}", shadow_id.trim()), "/quiet"]))
-        .map(|output| if output.trim().is_empty() { format!("Deleted restore point: {}", shadow_id.trim()) } else { output })
 }
 
 fn delete_restore_point_by_info_sync(args: DeleteRestorePointArgs) -> Result<String, String> {
@@ -792,14 +917,41 @@ fn delete_restore_point_by_info_sync(args: DeleteRestorePointArgs) -> Result<Str
         return Err("Administrator privileges are required to delete restore points. Please run Eoliann Windows Tools as Administrator.".into());
     }
 
-    if let Some(shadow_id) = args.shadow_id {
-        if !shadow_id.trim().is_empty() {
-            return delete_restore_point_sync(shadow_id);
-        }
+    let sequence_number = args
+        .sequence_number
+        .filter(|value| *value > 0 && *value <= u32::MAX as i64)
+        .ok_or_else(|| "Invalid restore point. Press Refresh and select a restore point again.".to_string())?;
+    system_restore::remove_restore_point(sequence_number as u32)?;
+    Ok(format!("Deleted restore point #{sequence_number}."))
+}
+
+fn delete_all_restore_points_sync() -> Result<String, String> {
+    if !is_admin() {
+        return Err("Administrator privileges are required to delete restore points. Please run Eoliann Windows Tools as Administrator.".into());
     }
 
-    let _ = args.sequence_number;
-    Err("Could not delete selected restore point on this system. Please press Refresh and select a valid restore point entry.".into())
+    let points = list_restore_points()?;
+    if points.is_empty() {
+        return Ok("No restore points found.".into());
+    }
+
+    let mut lines = Vec::new();
+    let mut failed = 0;
+    for point in &points {
+        match system_restore::remove_restore_point(point.sequence_number as u32) {
+            Ok(()) => lines.push(format!("Deleted #{} - {} ({})", point.sequence_number, point.description, point.creation_time)),
+            Err(error) => {
+                failed += 1;
+                lines.push(format!("FAILED #{}: {error}", point.sequence_number));
+            }
+        }
+    }
+    let summary = format!("Removed {} of {} restore points.", points.len() - failed, points.len());
+    if failed == points.len() {
+        Err(format!("{summary}\n{}", lines.join("\n")))
+    } else {
+        Ok(format!("{summary}\n{}", lines.join("\n")))
+    }
 }
 
 
@@ -843,7 +995,7 @@ foreach ($drive in $drives) { Start-Process cleanmgr.exe -ArgumentList ('/d ' + 
         "disable_sleep" => cmd_shell(r"powercfg /change standby-timeout-ac 0 & powercfg /change standby-timeout-dc 0 & powercfg /change hibernate-timeout-ac 0 & powercfg /change hibernate-timeout-dc 0"),
         "disable_hdd_timeout" => cmd_shell(r"powercfg /change disk-timeout-ac 0 & powercfg /change disk-timeout-dc 0"),
         "disable_monitor_timeout" => cmd_shell(r"powercfg /change monitor-timeout-ac 0 & powercfg /change monitor-timeout-dc 0"),
-        "delete_restore_points" => open_restore_cleanup_ui(),
+        "delete_restore_points" => delete_all_restore_points_sync(),
 
         // Essential / advanced tweaks
         "disable_consumer_features" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v SilentInstalledAppsEnabled /t REG_DWORD /d 0 /f & reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\CloudContent" /v DisableWindowsConsumerFeatures /t REG_DWORD /d 1 /f"#),
@@ -858,9 +1010,9 @@ $tasks = @(
 'Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload',
 'Microsoft\Windows\Windows Error Reporting\QueueReporting')
 foreach ($task in $tasks) { schtasks /Change /TN $task /Disable 2>&1 | Out-Null }
-New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Force | Out-Null
+Ensure-Key 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection'
 Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection' AllowTelemetry 0 -Type DWord
-New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo' -Force | Out-Null
+Ensure-Key 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo'
 Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo' DisabledByGroupPolicy 1 -Type DWord
 Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting' Disabled 1 -Type DWord -ErrorAction SilentlyContinue
 sc.exe stop DiagTrack 2>&1 | Out-Null
@@ -869,14 +1021,14 @@ sc.exe config DiagTrack start= disabled 2>&1 | Out-Null
 "#),
         "enable_telemetry" => cmd_shell(r#"reg add "HKLM\SOFTWARE\Policies\Microsoft\Windows\DataCollection" /v AllowTelemetry /t REG_DWORD /d 1 /f & sc config DiagTrack start= auto & sc start DiagTrack"#),
         "disable_location" => powershell(r#"
-New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors' -Force | Out-Null
+Ensure-Key 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors'
 Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors' DisableLocation 1 -Type DWord
 Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location' Value 'Deny' -ErrorAction SilentlyContinue
 'Location tracking policy applied.'
 "#),
         "disable_wifi_sense" => powershell(r#"
-New-Item 'HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting' -Force | Out-Null
-New-Item 'HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots' -Force | Out-Null
+Ensure-Key 'HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting'
+Ensure-Key 'HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots'
 Set-ItemProperty 'HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowWiFiHotSpotReporting' Value 0 -Type DWord
 Set-ItemProperty 'HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowAutoConnectToWiFiSenseHotspots' Value 0 -Type DWord
 'Wi-Fi Sense disabled.'
@@ -895,17 +1047,10 @@ Set-ItemProperty 'HKLM:\Software\Microsoft\PolicyManager\default\WiFi\AllowAutoC
         "hide_hidden_files" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v Hidden /t REG_DWORD /d 2 /f & taskkill /f /im explorer.exe & start explorer.exe"#),
         "show_file_extensions" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v HideFileExt /t REG_DWORD /d 0 /f & taskkill /f /im explorer.exe & start explorer.exe"#),
         "hide_file_extensions" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v HideFileExt /t REG_DWORD /d 1 /f & taskkill /f /im explorer.exe & start explorer.exe"#),
-        "toggle_explorer_tabs" => powershell(r#"
-New-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Force | Out-Null
-$current = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name DisableTabsInFileExplorer -ErrorAction SilentlyContinue).DisableTabsInFileExplorer
-if ($current -eq 1) { Remove-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name DisableTabsInFileExplorer -ErrorAction SilentlyContinue; 'Explorer tabs policy removed/enabled where supported.' }
-else { Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' DisableTabsInFileExplorer 1 -Type DWord; 'Explorer tabs disable flag set where supported.' }
-Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-"#),
         "debloat_edge" => powershell(r#"
-New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate' -Force | Out-Null
+Ensure-Key 'HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate'
 Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate' CreateDesktopShortcutDefault 0 -Type DWord
-New-Item 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Force | Out-Null
+Ensure-Key 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
 $settings = @{ EdgeEnhanceImagesEnabled = 0; PersonalizationReportingEnabled = 0; ShowRecommendationsEnabled = 0; HideFirstRunExperience = 1; UserFeedbackAllowed = 0; ConfigureDoNotTrack = 1; AlternateErrorPagesEnabled = 0; EdgeCollectionsEnabled = 0; EdgeFollowEnabled = 0; EdgeShoppingAssistantEnabled = 0; MicrosoftEdgeInsiderPromotionEnabled = 0; ShowMicrosoftRewards = 0; WebWidgetAllowed = 0; DiagnosticData = 0; CryptoWalletEnabled = 0; WalletDonationEnabled = 0 }
 foreach ($key in $settings.Keys) { Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Edge' -Name $key -Value $settings[$key] -Type DWord }
 'Edge debloat policies applied.'
@@ -950,11 +1095,15 @@ winget uninstall --id Microsoft.OneDrive -e --silent 2>$null
 "#),
         "install_onedrive" => command_output("winget", &args(&["install", "--id", "Microsoft.OneDrive", "-e", "--accept-package-agreements", "--accept-source-agreements"])),
         "run_ooshutup10" => powershell(r#"
-$url = 'https://www.oo-software.com/en/download/current/ooshutup10'
+$url = 'https://dl5.oo-software.com/files/ooshutup10/OOSU10.exe'
 $out = Join-Path $env:TEMP 'OOSU10.exe'
-Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
+$ProgressPreference = 'SilentlyContinue'
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing -ErrorAction Stop
+$signature = Get-AuthenticodeSignature -FilePath $out
+if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O&O Software') { Remove-Item $out -Force -ErrorAction SilentlyContinue; throw "Downloaded file is not a valid O&O signed executable ($($signature.Status))." }
 Start-Process $out
-'O&O ShutUp10++ downloaded from the official O&O current download URL and launched.'
+'O&O ShutUp10++ downloaded from O&O, signature verified and launched.'
 "#),
         "time_utc" => cmd_shell(r#"reg add "HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation" /v RealTimeIsUniversal /t REG_DWORD /d 1 /f"#),
         "time_local" => cmd_shell(r#"reg delete "HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation" /v RealTimeIsUniversal /f"#),
@@ -980,14 +1129,63 @@ else { net accounts /maxpwage:unlimited; 'Password expiration disabled: max age 
         "set_dns_dns0_zero" => set_dns("193.110.81.9", "185.253.5.9"),
         "set_dns_dns0_kids" => set_dns("193.110.81.1", "185.253.5.1"),
         "reset_dns" => reset_dns(),
-        "enable_insecure_guest_smb" => cmd_shell(r#"reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" /v AllowInsecureGuestAuth /t REG_DWORD /d 1 /f & reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" /v RequireSecuritySignature /t REG_DWORD /d 0 /f"#),
-        "disable_insecure_guest_smb" => cmd_shell(r#"reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" /v AllowInsecureGuestAuth /t REG_DWORD /d 0 /f & reg add "HKLM\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" /v RequireSecuritySignature /t REG_DWORD /d 1 /f"#),
+        "enable_insecure_guest_smb" => powershell(r#"
+$ErrorActionPreference = 'Continue'
+$log = New-Object System.Collections.Generic.List[string]
+
+Ensure-Key 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters'
+Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name RequireSecuritySignature -Type DWord -Value 0
+$log.Add('RequireSecuritySignature = 0') | Out-Null
+
+Ensure-Key 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation'
+Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation' -Name AllowInsecureGuestAuth -Type DWord -Value 1
+$log.Add('AllowInsecureGuestAuth (Policies) = 1') | Out-Null
+
+Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name AllowInsecureGuestAuth -Type DWord -Value 1
+$log.Add('AllowInsecureGuestAuth (legacy) = 1') | Out-Null
+
+net stop lanmanworkstation /y | Out-Null
+$restart = net start lanmanworkstation 2>&1 | Out-String
+if ($LASTEXITCODE -eq 0) {
+  $log.Add('LanmanWorkstation restarted') | Out-Null
+} else {
+  $log.Add('LanmanWorkstation restart failed; full Windows restart recommended') | Out-Null
+}
+
+"SUCCESS: Network Compatibility Fix fully implemented!`n`n" + ($log -join "`n") + "`n`nIMPORTANT NOTE:`n- gpedit may still show Not Configured (expected).`n- Changes are applied through registry.`n- Test guest share access after Windows restart if needed."
+"#),
+        "disable_insecure_guest_smb" => powershell(r#"
+$ErrorActionPreference = 'Continue'
+$log = New-Object System.Collections.Generic.List[string]
+
+Ensure-Key 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters'
+Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name RequireSecuritySignature -Type DWord -Value 1
+$log.Add('RequireSecuritySignature = 1') | Out-Null
+
+Remove-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation' -Name AllowInsecureGuestAuth -ErrorAction SilentlyContinue
+Remove-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name AllowInsecureGuestAuth -ErrorAction SilentlyContinue
+$log.Add('AllowInsecureGuestAuth removed from Policies + legacy') | Out-Null
+
+net stop lanmanworkstation /y | Out-Null
+net start lanmanworkstation | Out-Null
+$log.Add('LanmanWorkstation restarted') | Out-Null
+
+"SUCCESS: Secure defaults restored!`n`n" + ($log -join "`n") + "`n`nA full Windows restart is recommended."
+"#),
+        "enable_smb1_client" => cmd_shell(r#"dism /online /Enable-Feature /FeatureName:SMB1Protocol /All /NoRestart"#),
+        "disable_smb1_client" => cmd_shell(r#"dism /online /Disable-Feature /FeatureName:SMB1Protocol /NoRestart"#),
         "tcp_offload_on" => cmd_shell(r"netsh int tcp set global taskoffload=enabled"),
         "tcp_offload_off" => cmd_shell(r"netsh int tcp set global taskoffload=disabled"),
 
         // PERFORMANCE
         "visual_performance" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 2 /f"#),
-        "ultimate_performance" => cmd_shell(r"powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 & powercfg /setactive e9a42b02-d5df-448d-aa00-03f14749eb61"),
+        "ultimate_performance" => powershell(r#"
+$guid = 'e9a42b02-d5df-448d-aa00-03f14749eb61'
+if (-not ((powercfg /list | Out-String) -match $guid)) { powercfg -duplicatescheme $guid $guid | Out-Null }
+powercfg /setactive $guid
+if ($LASTEXITCODE -ne 0) { throw 'Ultimate Performance is not supported on this system.' }
+'Ultimate Performance power plan activated.'
+"#),
         "performance_lock" => cmd_shell(r"powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c & powercfg /change standby-timeout-ac 0 & powercfg /change standby-timeout-dc 0 & powercfg /change hibernate-timeout-ac 0 & powercfg /change hibernate-timeout-dc 0 & powercfg /change monitor-timeout-ac 0 & powercfg /change monitor-timeout-dc 0"),
         "restore_balanced_defaults" => cmd_shell(r"powercfg /setactive 381b4222-f694-41f0-9685-ff5bb260df2e & powercfg /change standby-timeout-ac 30 & powercfg /change standby-timeout-dc 15 & powercfg /change hibernate-timeout-ac 180 & powercfg /change hibernate-timeout-dc 60 & powercfg /change monitor-timeout-ac 15 & powercfg /change monitor-timeout-dc 5 & powercfg /change disk-timeout-ac 20 & powercfg /change disk-timeout-dc 10"),
         "high_performance" => cmd_shell(r"powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"),
@@ -997,13 +1195,9 @@ else { net accounts /maxpwage:unlimited; 'Password expiration disabled: max age 
         "hags_off" => cmd_shell(r#"reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" /v HwSchMode /t REG_DWORD /d 1 /f"#),
         "vbs_off" => cmd_shell(r#"reg add "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard" /v EnableVirtualizationBasedSecurity /t REG_DWORD /d 0 /f & reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v LsaCfgFlags /t REG_DWORD /d 0 /f & bcdedit /set hypervisorlaunchtype off"#),
         "vbs_on" => cmd_shell(r#"reg add "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard" /v EnableVirtualizationBasedSecurity /t REG_DWORD /d 1 /f & reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v LsaCfgFlags /t REG_DWORD /d 1 /f"#),
-        "open_startup_apps" => powershell(r#"
-Start-Process 'shell:startup'
-Start-Process 'shell:common startup'
-'Opened Startup folders (current user + all users).'
-"#),
-        "relaunch_apps_on" => powershell(r#"New-Item 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon' -Force | Out-Null; Set-ItemProperty 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name RestartApps -Type DWord -Value 1; 'Relaunch apps enabled.'"#),
-        "relaunch_apps_off" => powershell(r#"New-Item 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon' -Force | Out-Null; Set-ItemProperty 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name RestartApps -Type DWord -Value 0; 'Relaunch apps disabled.'"#),
+        "open_startup_apps" => open_ms_settings("ms-settings:startupapps"),
+        "relaunch_apps_on" => powershell(r#"Ensure-Key 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon'; Set-ItemProperty 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name RestartApps -Type DWord -Value 1; 'Relaunch apps enabled.'"#),
+        "relaunch_apps_off" => powershell(r#"Ensure-Key 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon'; Set-ItemProperty 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon' -Name RestartApps -Type DWord -Value 0; 'Relaunch apps disabled.'"#),
         "background_apps_off" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications" /v GlobalUserDisabled /t REG_DWORD /d 1 /f"#),
         "background_apps_on" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications" /v GlobalUserDisabled /t REG_DWORD /d 0 /f"#),
         "transparency_off" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v EnableTransparency /t REG_DWORD /d 0 /f"#),
@@ -1033,20 +1227,31 @@ Start-Process 'shell:common startup'
         "numlock_off" => set_numlock(false),
         "taskbar_search_hide" => set_taskbar_search(false),
         "taskbar_search_show" => set_taskbar_search(true),
-        "widgets_off" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v TaskbarDa /t REG_DWORD /d 0 /f & taskkill /f /im explorer.exe & start explorer.exe"#),
-        "widgets_on" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v TaskbarDa /t REG_DWORD /d 1 /f & taskkill /f /im explorer.exe & start explorer.exe"#),
+        "widgets_off" => powershell(r#"
+Ensure-Key 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh'
+Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' -Name AllowNewsAndInterests -Type DWord -Value 0
+Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name TaskbarDa -Type DWord -Value 0 -ErrorAction SilentlyContinue
+Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+'Widgets disabled by policy. Explorer restarted.'
+"#),
+        "widgets_on" => powershell(r#"
+Remove-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' -Name AllowNewsAndInterests -ErrorAction SilentlyContinue
+Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name TaskbarDa -Type DWord -Value 1 -ErrorAction SilentlyContinue
+Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+'Widgets policy removed. Explorer restarted. If the button is still hidden, enable Widgets in Settings > Personalization > Taskbar.'
+"#),
         "snap_on" => cmd_shell(r#"reg add "HKCU\Control Panel\Desktop" /v WindowArrangementActive /t REG_SZ /d 1 /f"#),
         "snap_off" => cmd_shell(r#"reg add "HKCU\Control Panel\Desktop" /v WindowArrangementActive /t REG_SZ /d 0 /f"#),
         "sticky_keys_off" => cmd_shell(r#"reg add "HKCU\Control Panel\Accessibility\StickyKeys" /v Flags /t REG_SZ /d 506 /f"#),
         "sticky_keys_on" => cmd_shell(r#"reg add "HKCU\Control Panel\Accessibility\StickyKeys" /v Flags /t REG_SZ /d 510 /f"#),
         "task_view_off" => powershell(r#"
-New-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Force | Out-Null
+Ensure-Key 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
 Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name ShowTaskViewButton -Value 0 -Type DWord
 & "$env:WINDIR\System32\RUNDLL32.EXE" user32.dll,UpdatePerUserSystemParameters 1, True | Out-Null
 'Task View hidden.'
 "#),
         "task_view_on" => powershell(r#"
-New-Item 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Force | Out-Null
+Ensure-Key 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
 Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name ShowTaskViewButton -Value 1 -Type DWord
 & "$env:WINDIR\System32\RUNDLL32.EXE" user32.dll,UpdatePerUserSystemParameters 1, True | Out-Null
 'Task View shown.'
@@ -1065,9 +1270,13 @@ Set-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advan
         "taskbar_left" => cmd_shell(r#"reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v TaskbarAl /t REG_DWORD /d 0 /f & taskkill /f /im explorer.exe & start explorer.exe"#),
 
         // APPS
-        "winget_upgrade_all" => command_output("winget", &args(&["upgrade", "--all", "--accept-package-agreements", "--accept-source-agreements"])),
-        "reinstall_winget" => powershell(r#"Start-Process 'ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1'; winget --info; 'Opened App Installer Store page and printed winget info if available.'"#),
-        "install_chrome" => command_output("winget", &args(&["install", "--id", "Google.Chrome", "-e", "--accept-package-agreements", "--accept-source-agreements"])),
+        "winget_upgrade_all" => command_output("winget", &args(&["upgrade", "--all", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"])),
+        "reinstall_winget" => powershell(r#"
+$ErrorActionPreference = 'Continue'
+Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe -ErrorAction SilentlyContinue
+if (Get-Command winget -ErrorAction SilentlyContinue) { 'App Installer re-registered. winget is available:'; winget --version }
+else { Start-Process 'ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1'; 'winget is still missing. Opened App Installer in Microsoft Store - install or update it there.' }
+"#),
         "install_chrome_extensions" => cmd_shell(r#"start "" "https://chromewebstore.google.com/category/extensions" & start "" "https://chromewebstore.google.com/search/uBlock%20Origin" & start "" "https://chromewebstore.google.com/search/Bitwarden""#),
 
         other => Err(format!("Unknown action_id: {other}")),
@@ -1082,9 +1291,9 @@ fn winget_action_sync(operation: String, package_ids: Vec<String>) -> Result<Str
     let mut combined = String::new();
     for package_id in package_ids {
         let mut command_args = match operation.as_str() {
-            "install" => vec!["install".to_string(), "--id".to_string(), package_id.clone(), "-e".to_string(), "--accept-package-agreements".to_string(), "--accept-source-agreements".to_string()],
-            "uninstall" => vec!["uninstall".to_string(), "--id".to_string(), package_id.clone(), "-e".to_string()],
-            "upgrade" => vec!["upgrade".to_string(), "--id".to_string(), package_id.clone(), "-e".to_string(), "--accept-package-agreements".to_string(), "--accept-source-agreements".to_string()],
+            "install" => vec!["install".to_string(), "--id".to_string(), package_id.clone(), "-e".to_string(), "--accept-package-agreements".to_string(), "--accept-source-agreements".to_string(), "--disable-interactivity".to_string()],
+            "uninstall" => vec!["uninstall".to_string(), "--id".to_string(), package_id.clone(), "-e".to_string(), "--silent".to_string(), "--accept-source-agreements".to_string(), "--disable-interactivity".to_string()],
+            "upgrade" => vec!["upgrade".to_string(), "--id".to_string(), package_id.clone(), "-e".to_string(), "--silent".to_string(), "--accept-package-agreements".to_string(), "--accept-source-agreements".to_string(), "--disable-interactivity".to_string()],
             other => return Err(format!("Unsupported winget operation: {other}")),
         };
 
@@ -1102,61 +1311,159 @@ fn winget_action_sync(operation: String, package_ids: Vec<String>) -> Result<Str
     Ok(combined.trim().to_string())
 }
 
-fn remove_windows_app_sync(package_name: String) -> Result<String, String> {
-    if package_name.trim().is_empty() {
-        return Err("Package name is empty.".into());
+const DEPROVISIONED_ROOT: &str = r"HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Deprovisioned";
+
+fn is_valid_package_token(value: &str) -> bool {
+    !value.is_empty() && value.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+}
+
+/// Debloat flow that survives Windows feature updates:
+/// 1. add the package family to the AppxAllUserStore\Deprovisioned list,
+/// 2. remove the provisioned package so new user profiles do not get it,
+/// 3. uninstall it for every existing user.
+fn remove_windows_apps_sync(targets: Vec<WindowsAppTarget>) -> Result<String, String> {
+    if targets.is_empty() {
+        return Err("No Windows apps selected.".into());
     }
-    let name = ps_single_quote(&package_name);
-    let script = format!(r#"
+    if !is_admin() {
+        return Err("Administrator privileges are required to deprovision Windows apps. Please run Eoliann Windows Tools as Administrator.".into());
+    }
+
+    let mut entries = Vec::new();
+    for target in &targets {
+        let name = target.package_name.trim();
+        if !is_valid_package_token(name) {
+            return Err(format!("Invalid package name: {name}"));
+        }
+        let family = target.family_name.as_deref().map(str::trim).unwrap_or("");
+        if !family.is_empty() && !is_valid_package_token(family) {
+            return Err(format!("Invalid package family name: {family}"));
+        }
+        entries.push(format!("[PSCustomObject]@{{ Name = {}; Family = {} }}", ps_single_quote(name), ps_single_quote(family)));
+    }
+
+    let mut script = format!("$targets = @({})\n$root = {}\n", entries.join(", "), ps_single_quote(DEPROVISIONED_ROOT));
+    script.push_str(r#"
 $ErrorActionPreference = 'Continue'
-$name = {name}
-$pattern = "*$name*"
-$removed = New-Object System.Collections.Generic.List[string]
-$failed = New-Object System.Collections.Generic.List[string]
+$log = New-Object System.Collections.Generic.List[string]
+$failed = 0
+Ensure-Key $root
+$installed = @(Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue)
+$provisioned = @(Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue)
 
-$packages = @(Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue | Where-Object {{
-  $_.Name -eq $name -or $_.Name -like $pattern -or $_.PackageFamilyName -like $pattern -or $_.PackageFullName -like $pattern
-}})
+foreach ($target in $targets) {
+  $name = $target.Name
+  $pkgs = @($installed | Where-Object { $_.Name -eq $name })
+  $provs = @($provisioned | Where-Object { $_.DisplayName -eq $name })
 
-foreach ($pkg in $packages) {{
-  $target = $pkg.PackageFullName
-  try {{
-    Remove-AppxPackage -Package $target -AllUsers -ErrorAction Stop
-    $removed.Add("Appx(all users): $target") | Out-Null
-    continue
-  }} catch {{
-    try {{
-      Remove-AppxPackage -Package $target -ErrorAction Stop
-      $removed.Add("Appx(current user): $target") | Out-Null
-      continue
-    }} catch {{
-      $failed.Add("Failed Appx: $target") | Out-Null
-    }}
-  }}
-}}
+  $families = @($pkgs | ForEach-Object { $_.PackageFamilyName }) + @($provs | ForEach-Object { $_.DisplayName + '_' + (($_.PackageName -split '__')[-1]) })
+  if ($target.Family) { $families += $target.Family }
+  $families = @($families | Where-Object { $_ } | Sort-Object -Unique)
 
-$provisioned = @(Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object {{
-  $_.DisplayName -eq $name -or $_.DisplayName -like $pattern -or $_.PackageName -like $pattern
-}})
+  foreach ($family in $families) {
+    $familyKey = Join-Path $root $family
+    Ensure-Key $familyKey
+    if (Test-Path -LiteralPath $familyKey) { $log.Add("[$name] Added to Deprovisioned list: $family") | Out-Null }
+    else { $failed++; $log.Add("[$name] FAILED to add to Deprovisioned list: $family") | Out-Null }
+  }
 
-foreach ($prov in $provisioned) {{
-  try {{
-    Remove-AppxProvisionedPackage -Online -PackageName $prov.PackageName -ErrorAction Stop | Out-Null
-    $removed.Add("Provisioned: $($prov.PackageName)") | Out-Null
-  }} catch {{
-    $failed.Add("Failed provisioned: $($prov.PackageName)") | Out-Null
-  }}
-}}
+  foreach ($prov in $provs) {
+    try {
+      Remove-AppxProvisionedPackage -Online -AllUsers -PackageName $prov.PackageName -ErrorAction Stop | Out-Null
+      $log.Add("[$name] Removed provisioned package: $($prov.PackageName)") | Out-Null
+    } catch {
+      try {
+        Remove-AppxProvisionedPackage -Online -PackageName $prov.PackageName -ErrorAction Stop | Out-Null
+        $log.Add("[$name] Removed provisioned package: $($prov.PackageName)") | Out-Null
+      } catch {
+        $failed++
+        $log.Add("[$name] FAILED to remove provisioned package $($prov.PackageName): $($_.Exception.Message)") | Out-Null
+      }
+    }
+  }
 
-if ($removed.Count -eq 0 -and $failed.Count -eq 0) {{
-  "No matching package found for: $name"
-}} elseif ($failed.Count -eq 0) {{
-  "Removed successfully:`n" + ($removed -join "`n")
-}} else {{
-  "Partial removal result:`n" + (($removed + $failed) -join "`n")
-}}
+  foreach ($pkg in $pkgs) {
+    try {
+      Remove-AppxPackage -Package $pkg.PackageFullName -AllUsers -ErrorAction Stop
+      $log.Add("[$name] Uninstalled for all users: $($pkg.PackageFullName)") | Out-Null
+    } catch {
+      try {
+        Remove-AppxPackage -Package $pkg.PackageFullName -ErrorAction Stop
+        $log.Add("[$name] Uninstalled for current user: $($pkg.PackageFullName)") | Out-Null
+      } catch {
+        $failed++
+        $log.Add("[$name] FAILED to uninstall $($pkg.PackageFullName): $($_.Exception.Message)") | Out-Null
+      }
+    }
+  }
+
+  if ($pkgs.Count -eq 0 -and $provs.Count -eq 0) {
+    $log.Add("[$name] Not installed. Blocked from being reinstalled by Windows updates.") | Out-Null
+  }
+}
+
+$header = if ($failed -eq 0) { "Debloat completed for $($targets.Count) app(s). Removed apps will not be reinstalled by Windows feature updates." } else { "Debloat finished with $failed error(s)." }
+$header + "`n" + ($log -join "`n")
 "#);
     powershell(&script)
+}
+
+fn restore_deprovisioned_app_sync(family_name: String) -> Result<String, String> {
+    let family = family_name.trim();
+    if !is_valid_package_token(family) {
+        return Err(format!("Invalid package family name: {family}"));
+    }
+    if !is_admin() {
+        return Err("Administrator privileges are required to change the Deprovisioned list. Please run Eoliann Windows Tools as Administrator.".into());
+    }
+    let script = format!("$path = Join-Path {} {}\n", ps_single_quote(DEPROVISIONED_ROOT), ps_single_quote(family))
+        + r#"
+if (Test-Path -LiteralPath $path) {
+  Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+  "Removed from Deprovisioned list: $(Split-Path $path -Leaf). Reinstall the app from Microsoft Store if you need it now; Windows may also restore it on the next feature update."
+} else {
+  "Not in Deprovisioned list: $(Split-Path $path -Leaf)"
+}
+"#;
+    powershell(&script)
+}
+
+fn get_windows_apps_status_sync() -> Result<WindowsAppsStatus, String> {
+    let script = format!("$root = {}\n", ps_single_quote(DEPROVISIONED_ROOT))
+        + r#"
+$ErrorActionPreference = 'SilentlyContinue'
+$packages = @{}
+foreach ($p in @(Get-AppxPackage -AllUsers)) {
+  if (-not $packages.ContainsKey($p.Name)) {
+    $packages[$p.Name] = [PSCustomObject]@{ Name = $p.Name; FamilyName = $p.PackageFamilyName; Installed = $true; Provisioned = $false }
+  }
+}
+foreach ($p in @(Get-AppxProvisionedPackage -Online)) {
+  if ($packages.ContainsKey($p.DisplayName)) { $packages[$p.DisplayName].Provisioned = $true }
+  else { $packages[$p.DisplayName] = [PSCustomObject]@{ Name = $p.DisplayName; FamilyName = $p.DisplayName + '_' + (($p.PackageName -split '__')[-1]); Installed = $false; Provisioned = $true } }
+}
+$deprovisioned = @(Get-ChildItem -LiteralPath $root | ForEach-Object { $_.PSChildName })
+ConvertTo-Json -InputObject ([PSCustomObject]@{ Packages = @($packages.Values); Deprovisioned = $deprovisioned }) -Depth 4 -Compress
+"#;
+    let json = powershell(&script)?;
+    let parsed: PsWindowsAppsStatus = serde_json::from_str(json.trim())
+        .map_err(|error| format!("Failed to parse Windows apps status: {error}"))?;
+    Ok(WindowsAppsStatus {
+        packages: parsed
+            .packages
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|item| {
+                Some(WindowsAppPackage {
+                    name: item.name.filter(|name| !name.is_empty())?,
+                    family_name: item.family_name.unwrap_or_default(),
+                    installed: item.installed.unwrap_or(false),
+                    provisioned: item.provisioned.unwrap_or(false),
+                })
+            })
+            .collect(),
+        deprovisioned: parsed.deprovisioned.unwrap_or_default(),
+    })
 }
 
 fn open_system_tool_sync(tool_id: String) -> Result<String, String> {
@@ -1168,7 +1475,7 @@ fn open_system_tool_sync(tool_id: String) -> Result<String, String> {
         "diskmgmt" => powershell("Start-Process diskmgmt.msc; 'Disk Management launched.'"),
         "msinfo32" | "systeminfo" => powershell("Start-Process msinfo32.exe; 'System Information launched.'"),
         "windows_update" => open_ms_settings("ms-settings:windowsupdate"),
-        "winx" => powershell("Start-Process 'ms-settings:'; 'Settings launched. Use Win+X manually for the Quick Link menu.'"),
+        "winx" => send_win_x(),
         "run" => powershell("Start-Process explorer.exe 'shell:::{2559a1f3-21d7-11d4-bdaf-00c04f60b9f0}'; 'Run dialog requested.'"),
         "settings" => open_ms_settings("ms-settings:"),
         "control_panel" => powershell("Start-Process control.exe; 'Control Panel launched.'"),
@@ -1181,12 +1488,22 @@ fn open_system_tool_sync(tool_id: String) -> Result<String, String> {
 }
 
 fn get_installed_apps_sync() -> Result<String, String> {
-    command_output("winget", &args(&["list"]))
+    command_output("winget", &args(&["list", "--accept-source-agreements", "--disable-interactivity"]))
 }
 
 #[tauri::command]
-pub async fn get_installed_windows_apps() -> Result<Vec<String>, String> {
-    run_blocking(get_installed_windows_apps_sync).await
+pub async fn get_windows_apps_status() -> Result<WindowsAppsStatus, String> {
+    run_blocking(get_windows_apps_status_sync).await
+}
+
+#[tauri::command]
+pub async fn remove_windows_apps(targets: Vec<WindowsAppTarget>) -> Result<String, String> {
+    run_blocking(move || remove_windows_apps_sync(targets)).await
+}
+
+#[tauri::command]
+pub async fn restore_deprovisioned_app(family_name: String) -> Result<String, String> {
+    run_blocking(move || restore_deprovisioned_app_sync(family_name)).await
 }
 
 #[tauri::command]
@@ -1194,32 +1511,57 @@ pub async fn open_external_url(url: String) -> Result<String, String> {
     run_blocking(move || open_external_url_sync(url)).await
 }
 
-fn get_installed_windows_apps_sync() -> Result<Vec<String>, String> {
+fn get_smb_guest_status_sync() -> Result<SmbGuestStatus, String> {
     let script = r#"
 $ErrorActionPreference = 'SilentlyContinue'
-$names = Get-AppxPackage -AllUsers | Select-Object -ExpandProperty Name
-$prov = Get-AppxProvisionedPackage -Online | Select-Object -ExpandProperty DisplayName
-@($names + $prov) | Where-Object { $_ } | Sort-Object -Unique | ConvertTo-Json -Compress
+
+$cfg = Get-SmbClientConfiguration
+$policy = Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LanmanWorkstation' -Name AllowInsecureGuestAuth -ErrorAction SilentlyContinue
+$legacy = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters' -Name AllowInsecureGuestAuth -ErrorAction SilentlyContinue
+$smb1 = Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol -ErrorAction SilentlyContinue
+
+[PSCustomObject]@{
+  EnableInsecureGuestLogons = if ($null -ne $cfg) { [bool]$cfg.EnableInsecureGuestLogons } else { $null }
+  RequireSecuritySignature = if ($null -ne $cfg) { [bool]$cfg.RequireSecuritySignature } else { $null }
+  PolicyAllowInsecureGuestAuth = if ($null -ne $policy) { [int]$policy.AllowInsecureGuestAuth } else { $null }
+  LegacyAllowInsecureGuestAuth = if ($null -ne $legacy) { [int]$legacy.AllowInsecureGuestAuth } else { $null }
+  Smb1Enabled = if ($null -ne $smb1) { $smb1.State -eq 'Enabled' } else { $null }
+} | ConvertTo-Json -Compress
 "#;
+
     let json = powershell(script)?;
-    if json.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-    let value: serde_json::Value = serde_json::from_str(&json).map_err(|e| format!("Failed to parse installed Windows apps JSON: {e}"))?;
-    if value.is_array() {
-        serde_json::from_value(value).map_err(|e| e.to_string())
-    } else {
-        let one: String = serde_json::from_value(value).map_err(|e| e.to_string())?;
-        Ok(vec![one])
-    }
+    let parsed: SmbGuestStatus = serde_json::from_str(json.trim()).map_err(|e| format!("Failed to parse SMB status: {e}"))?;
+    Ok(parsed)
 }
 
 fn open_external_url_sync(url: String) -> Result<String, String> {
     let trimmed = url.trim();
-    if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) {
+    if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) || trimmed.chars().any(|ch| ch.is_control()) {
         return Err("Only http/https URLs are allowed.".into());
     }
-    powershell(&format!("Start-Process '{}'; 'Opened {}'", trimmed.replace('"', ""), trimmed.replace('"', "")))
+    powershell(&format!("Start-Process {}; 'Opened {}'", ps_single_quote(trimmed), trimmed.replace('\'', "''")))
+}
+
+#[cfg(windows)]
+fn send_win_x() -> Result<String, String> {
+    extern "system" {
+        fn keybd_event(vk: u8, scan: u8, flags: u32, extra: usize);
+    }
+    const VK_LWIN: u8 = 0x5B;
+    const VK_X: u8 = 0x58;
+    const KEYEVENTF_KEYUP: u32 = 0x0002;
+    unsafe {
+        keybd_event(VK_LWIN, 0, 0, 0);
+        keybd_event(VK_X, 0, 0, 0);
+        keybd_event(VK_X, 0, KEYEVENTF_KEYUP, 0);
+        keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0);
+    }
+    Ok("Win + X Quick Link menu opened.".into())
+}
+
+#[cfg(not(windows))]
+fn send_win_x() -> Result<String, String> {
+    Err("Win + X is only available on Windows.".into())
 }
 
 fn create_local_user_sync(username: String, password: String, add_to_admins: bool) -> Result<String, String> {

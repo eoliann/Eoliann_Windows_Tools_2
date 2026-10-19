@@ -1,6 +1,6 @@
 import { RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { deleteRestorePointByInfo, getRestorePoints } from "../lib/commands";
+import { deleteRestorePoint, getRestorePoints } from "../lib/commands";
 import type { RestorePointInfo } from "../types";
 
 export default function RestorePointsPanel() {
@@ -10,6 +10,7 @@ export default function RestorePointsPanel() {
   const [points, setPoints] = useState<RestorePointInfo[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -34,10 +35,12 @@ export default function RestorePointsPanel() {
     if (selectedIndex < 0 || selectedIndex >= points.length) return;
     setDeleting(true);
     setError(null);
+    setMessage(null);
     try {
       const selectedPoint = points[selectedIndex];
-      await deleteRestorePointByInfo(selectedPoint.shadow_id ?? "", selectedPoint.sequence_number ?? 0);
+      const result = await deleteRestorePoint(selectedPoint.sequence_number);
       await refresh();
+      setMessage(result);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -58,7 +61,7 @@ export default function RestorePointsPanel() {
           <option value={-1}>Select restore point</option>
           {points.map((point, index) => (
             <option key={`${point.shadow_id}-${point.sequence_number}-${index}`} value={index}>
-              {point.creation_time} - {point.description}
+              #{point.sequence_number} · {point.creation_time} - {point.description}
             </option>
           ))}
         </select>
@@ -69,6 +72,7 @@ export default function RestorePointsPanel() {
           <Trash2 size={16} /> Delete selected
         </button>
       </div>
+      {message && <p className="notice">{message}</p>}
       {error && <p className="notice warn">Restore points error: {error}</p>}
     </section>
   );
