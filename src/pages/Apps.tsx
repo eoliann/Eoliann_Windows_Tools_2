@@ -1,5 +1,5 @@
 import { ChevronDown, Download, PackageCheck, RefreshCw, Search, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ActionGrid from "../components/ActionGrid";
 import { appActions, appCatalog } from "../data/actions";
 import { getInstalledApps, installChromeExtensions } from "../lib/commands";
@@ -29,13 +29,38 @@ const chromeExtensions = [
   { id: "pachckjkecffpdphbpmfolblodfkgbhl", name: "vidIQ Vision for YouTube", defaultEnabled: false }
 ];
 
+const catalogIdsByLower = new Map(appCatalog.map((app) => [app.id.toLowerCase(), app.id]));
+// Longest first, so "Mozilla.Firefox.ESR.x" resolves to Firefox ESR rather than Firefox.
+const catalogIdsLongestFirst = [...catalogIdsByLower.keys()].sort((a, b) => b.length - a.length);
+
+// "google.chrome.exe" -> "Google.Chrome": winget sometimes lists a variant of the catalog id.
+function catalogIdForToken(token: string) {
+  const exact = catalogIdsByLower.get(token);
+  if (exact) return exact;
+  const prefix = catalogIdsLongestFirst.find((id) => token.startsWith(`${id}.`));
+  return prefix ? catalogIdsByLower.get(prefix) : undefined;
+}
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Matches `winget list` rows against the catalog. A row whose Id column is a catalog id
+// belongs to that app only; rows without a known id (ARP\..., MSIX\..., Store ids) fall
+// back to a whole-word match of the app name in the Name column, so "Git" does not match
+// "GitHub Desktop" and "Vim" does not match "Neovim".
 function buildInstalledSet(output: string) {
   const found = new Set<string>();
-  const lower = output.toLowerCase();
+  const unmatchedNames: string[] = [];
+  for (const raw of output.split(/\r?\n/)) {
+    const row = raw.slice(raw.lastIndexOf("\r") + 1).trim().toLowerCase();
+    if (!row) continue;
+    const ids = row.split(/\s+/).map(catalogIdForToken).filter((id): id is string => Boolean(id));
+    if (ids.length) ids.forEach((id) => found.add(id));
+    else unmatchedNames.push(row.split(/\s{2,}/)[0]);
+  }
   for (const app of appCatalog) {
-    if (lower.includes(app.id.toLowerCase()) || lower.includes(app.name.toLowerCase())) {
-      found.add(app.id);
-    }
+    if (found.has(app.id)) continue;
+    const pattern = new RegExp(`(^|[^a-z0-9])${escapeRegExp(app.name.toLowerCase())}($|[^a-z0-9])`);
+    if (unmatchedNames.some((name) => pattern.test(name))) found.add(app.id);
   }
   return found;
 }
@@ -46,21 +71,26 @@ export default function Apps({ running, runningId, onRun, onInstall, onUninstall
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set());
   const [checkingInstalled, setCheckingInstalled] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [skippedNotice, setSkippedNotice] = useState<string | null>(null);
+  const scanRequest = useRef(0);
   const [extensionsOutput, setExtensionsOutput] = useState<string>("");
   const [selectedExts, setSelectedExts] = useState<Set<string>>(
     new Set(chromeExtensions.filter((extension) => extension.defaultEnabled).map((extension) => extension.id))
   );
 
   const scanInstalled = useCallback(async () => {
+    // Only the latest scan may update state, so a slow earlier scan cannot overwrite
+    // the status refreshed after an install/uninstall.
+    const request = ++scanRequest.current;
     setCheckingInstalled(true);
     setScanError(null);
     try {
       const output = await getInstalledApps();
-      setInstalledIds(buildInstalledSet(output));
+      if (request === scanRequest.current) setInstalledIds(buildInstalledSet(output));
     } catch (error) {
-      setScanError(String(error));
+      if (request === scanRequest.current) setScanError(String(error));
     } finally {
-      setCheckingInstalled(false);
+      if (request === scanRequest.current) setCheckingInstalled(false);
     }
   }, []);
 
@@ -92,6 +122,7 @@ export default function Apps({ running, runningId, onRun, onInstall, onUninstall
   }, [filtered]);
 
   const selectedIds = [...selected];
+  const installableIds = selectedIds.filter((id) => !installedIds.has(id));
   const toggle = (app: AppCatalogItem) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -100,7 +131,16 @@ export default function Apps({ running, runningId, onRun, onInstall, onUninstall
     });
   };
 
-  const startInstall = () => onInstall(selectedIds);
+  const startInstall = () => {
+    const skipped = appCatalog.filter((app) => selected.has(app.id) && installedIds.has(app.id));
+    const skippedNames = [...new Set(skipped.map((app) => app.name))];
+    setSkippedNotice(
+      skippedNames.length
+        ? `Skipped ${skippedNames.length} app(s): ${skippedNames.join(", ")}. Reason: already installed. Use "Upgrade selected" to update them.`
+        : null
+    );
+    if (installableIds.length) onInstall(installableIds);
+  };
   const startUpgrade = () => onUpgrade(selectedIds);
   const startUninstall = () => onUninstall(selectedIds);
   const installSelectedExtensions = () => {
@@ -122,7 +162,14 @@ export default function Apps({ running, runningId, onRun, onInstall, onUninstall
         <div className="search-box"><Search size={18} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search winget apps, categories or package IDs..." /></div>
         <div className="toolbar-actions">
           <button className="ghost-button" disabled={checkingInstalled || running} onClick={() => void scanInstalled()}><RefreshCw size={16} className={checkingInstalled ? "spin" : ""} /> Scan installed</button>
-          <button className="primary-button" disabled={!selected.size || running} onClick={startInstall}><Download size={16} /> Install selected</button>
+          <button
+            className="primary-button"
+            disabled={!installableIds.length || running}
+            title={selected.size && !installableIds.length ? "All selected apps are already installed" : undefined}
+            onClick={startInstall}
+          >
+            <Download size={16} /> Install selected
+          </button>
           <button className="ghost-button" disabled={!selected.size || running} onClick={startUpgrade}><PackageCheck size={16} /> Upgrade selected</button>
           <button className="danger-button" disabled={!selected.size || running} onClick={startUninstall}><Trash2 size={16} /> Uninstall selected</button>
         </div>
@@ -164,6 +211,8 @@ export default function Apps({ running, runningId, onRun, onInstall, onUninstall
           <span>{selected.size} selected · {filtered.length} shown · {installedIds.size} detected installed</span>
         </div>
         {scanError && <p className="notice warn">Installed-app scan failed: {scanError}</p>}
+        {skippedNotice && <p className="notice warn">{skippedNotice}</p>}
+        {checkingInstalled && !running && <p className="notice">Refreshing installed status...</p>}
         {running && <p className="notice">Operation in progress. Details are shown in the global status overlay and log panel.</p>}
 
         <div className="catalog-sections">

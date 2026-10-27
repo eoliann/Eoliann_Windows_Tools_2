@@ -1304,6 +1304,18 @@ fn winget_action_sync(operation: String, package_ids: Vec<String>) -> Result<Str
             command_args.push("--silent".to_string());
         }
 
+        if package_id == FALKON_PACKAGE_ID && operation != "uninstall" {
+            combined.push_str(&format!("\n> {} {} (latest KDE CI build)\n", operation, package_id));
+            match install_falkon_from_kde_ci() {
+                Ok(output) => {
+                    combined.push_str(&output);
+                    combined.push('\n');
+                    continue;
+                }
+                Err(error) => combined.push_str(&format!("KDE CI install failed, falling back to winget: {error}\n")),
+            }
+        }
+
         combined.push_str(&format!("\n> winget {} {}\n", operation, package_id));
         match command_output("winget", &command_args) {
             Ok(output) => combined.push_str(&output),
@@ -1312,6 +1324,46 @@ fn winget_action_sync(operation: String, package_ids: Vec<String>) -> Result<Str
         combined.push('\n');
     }
     Ok(combined.trim().to_string())
+}
+
+const FALKON_PACKAGE_ID: &str = "KDE.Falkon";
+const FALKON_CI_INDEX: &str = "https://origin.cdn.kde.org/ci-builds/network/falkon/master/windows/";
+
+/// KDE publishes Falkon Windows builds only on its CI server, and the installer file name
+/// changes with every build (falkon-master-<build>-windows-...-x86_64.exe), so a fixed URL
+/// (as used by winget manifests) stops working. Resolve the newest installer from the
+/// directory listing, verify its .sha256 and run it silently (NSIS /S).
+fn install_falkon_from_kde_ci() -> Result<String, String> {
+    let script = format!("$base = {}\n", ps_single_quote(FALKON_CI_INDEX))
+        + r#"
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+function Get-Text([string]$Uri) {
+  $content = (Invoke-WebRequest -Uri $Uri -UseBasicParsing).Content
+  if ($content -is [byte[]]) { [Text.Encoding]::ASCII.GetString($content) } else { [string]$content }
+}
+$index = Get-Text $base
+$builds = @([regex]::Matches($index, 'href="(falkon-master-(\d+)-windows-[^"/]*x86_64\.exe)"') |
+  ForEach-Object { [PSCustomObject]@{ File = $_.Groups[1].Value; Build = [int]$_.Groups[2].Value } } |
+  Sort-Object Build -Descending)
+if ($builds.Count -eq 0) { throw "No Falkon x86_64 installer found at $base" }
+$file = $builds[0].File
+$expected = ((Get-Text ($base + $file + '.sha256')).Trim() -split '\s+')[0]
+if ($expected -notmatch '^[0-9a-fA-F]{64}$') { throw "Invalid checksum file for $file" }
+$dest = Join-Path $env:TEMP $file
+try {
+  Invoke-WebRequest -Uri ($base + $file) -OutFile $dest -UseBasicParsing
+  $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $dest).Hash
+  if ($actual -ne $expected.ToUpperInvariant()) { throw "SHA256 mismatch for $file" }
+  $process = Start-Process -FilePath $dest -ArgumentList '/S' -Wait -PassThru
+  if ($process.ExitCode -ne 0) { throw "Installer exited with code $($process.ExitCode)" }
+} finally {
+  Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
+}
+"Installed Falkon build $($builds[0].Build) from KDE CI ($file)."
+"#;
+    powershell(&script)
 }
 
 const DEPROVISIONED_ROOT: &str = r"HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Deprovisioned";

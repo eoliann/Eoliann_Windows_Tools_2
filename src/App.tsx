@@ -222,11 +222,12 @@ export default function App() {
     try {
       const result = await wingetAction(operation, ids);
       appendOutput(result || "winget action completed.");
-      window.dispatchEvent(new CustomEvent("ewt-winget-finished", { detail: { operation, ids } }));
     } catch (error) {
       appendOutput(`ERROR: ${String(error)}`);
     } finally {
       setRunningId(null);
+      // Refresh installed status even if winget failed part-way: some packages may have changed.
+      window.dispatchEvent(new CustomEvent("ewt-winget-finished", { detail: { operation, ids } }));
     }
   };
 
