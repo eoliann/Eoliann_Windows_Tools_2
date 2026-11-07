@@ -15,6 +15,7 @@ interface AppsProps {
 }
 
 const normalize = (value: string) => value.trim().toLowerCase();
+const catalogOrder = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 
 const chromeExtensions = [
   { id: "bgnkhhnnamicmpeenaelnjfhikgbkllg", name: "AdGuard AdBlocker", defaultEnabled: true },
@@ -109,7 +110,9 @@ export default function Apps({ running, runningId, onRun, onInstall, onUninstall
 
   const filtered = useMemo(() => {
     const q = normalize(query);
-    return appCatalog.filter((app) => !q || normalize(app.name).includes(q) || normalize(app.category).includes(q) || normalize(app.id).includes(q));
+    return appCatalog
+      .filter((app) => !q || normalize(app.name).includes(q) || normalize(app.category).includes(q) || normalize(app.id).includes(q))
+      .sort((a, b) => catalogOrder.compare(a.category, b.category) || catalogOrder.compare(a.name, b.name));
   }, [query]);
 
   const grouped = useMemo(() => {
@@ -159,7 +162,7 @@ export default function Apps({ running, runningId, onRun, onInstall, onUninstall
       <ActionGrid actions={appActions} runningId={runningId} onRun={onRun} />
 
       <section className="toolbar-card">
-        <div className="search-box"><Search size={18} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search winget apps, categories or package IDs..." /></div>
+        <div className="search-box"><Search size={18} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search apps, categories or package IDs..." /></div>
         <div className="toolbar-actions">
           <button className="ghost-button" disabled={checkingInstalled || running} onClick={() => void scanInstalled()}><RefreshCw size={16} className={checkingInstalled ? "spin" : ""} /> Scan installed</button>
           <button
