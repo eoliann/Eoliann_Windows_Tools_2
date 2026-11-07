@@ -1295,13 +1295,31 @@ fn winget_action_sync(operation: String, package_ids: Vec<String>) -> Result<Str
     for package_id in package_ids {
         let mut command_args = match operation.as_str() {
             "install" => vec!["install".to_string(), "--id".to_string(), package_id.clone(), "-e".to_string(), "--accept-package-agreements".to_string(), "--accept-source-agreements".to_string(), "--disable-interactivity".to_string()],
-            "uninstall" => vec!["uninstall".to_string(), "--id".to_string(), package_id.clone(), "-e".to_string(), "--silent".to_string(), "--accept-source-agreements".to_string(), "--disable-interactivity".to_string()],
+            "uninstall" => {
+                // The official ArtCraft MSI registers a display name instead of a WinGet ID.
+                let (selector, value) = if package_id == ARTCRAFT_LAUNCHER_ID {
+                    ("--name", "ArtCraft Launcher")
+                } else {
+                    ("--id", package_id.as_str())
+                };
+                args(&["uninstall", selector, value, "-e", "--silent", "--accept-source-agreements", "--disable-interactivity"])
+            }
             "upgrade" => vec!["upgrade".to_string(), "--id".to_string(), package_id.clone(), "-e".to_string(), "--silent".to_string(), "--accept-package-agreements".to_string(), "--accept-source-agreements".to_string(), "--disable-interactivity".to_string()],
             other => return Err(format!("Unsupported winget operation: {other}")),
         };
 
         if operation == "install" {
             command_args.push("--silent".to_string());
+        }
+
+        if package_id == ARTCRAFT_LAUNCHER_ID && operation != "uninstall" {
+            combined.push_str(&format!("\n> {operation} {package_id} (official GitHub release)\n"));
+            match install_artcraft_launcher() {
+                Ok(output) => combined.push_str(&output),
+                Err(error) => combined.push_str(&format!("ERROR: {error}")),
+            }
+            combined.push('\n');
+            continue;
         }
 
         if package_id == FALKON_PACKAGE_ID && operation != "uninstall" {
@@ -1324,6 +1342,49 @@ fn winget_action_sync(operation: String, package_ids: Vec<String>) -> Result<Str
         combined.push('\n');
     }
     Ok(combined.trim().to_string())
+}
+
+const ARTCRAFT_LAUNCHER_ID: &str = "Storytold.ArtCraftLauncher";
+
+fn install_artcraft_launcher() -> Result<String, String> {
+    powershell(r#"
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+$architecture = $env:PROCESSOR_ARCHITECTURE
+if ($env:PROCESSOR_ARCHITEW6432) { $architecture = $env:PROCESSOR_ARCHITEW6432 }
+$arch = switch ($architecture) {
+  'AMD64' { 'x64' }
+  'ARM64' { 'arm64' }
+  default { throw "ArtCraft Launcher does not publish a Windows MSI for $architecture." }
+}
+
+$repo = 'storytold/craft-launcher'
+$release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases/latest" -UseBasicParsing -TimeoutSec 30
+$tag = $release.tag_name
+if ($tag -notmatch '^v\d+\.\d+\.\d+$') { throw "Unexpected ArtCraft Launcher release tag: $tag" }
+$file = "artcraft-launcher-$($tag.Substring(1))-windows-$arch.msi"
+$asset = $release.assets | Where-Object { $_.name -eq $file } | Select-Object -First 1
+if ($asset.digest -notmatch '^sha256:[0-9a-fA-F]{64}$') { throw "Missing SHA256 digest for $file" }
+
+$dest = Join-Path $env:TEMP ("artcraft-launcher-" + [guid]::NewGuid() + ".msi")
+try {
+  Invoke-WebRequest -Uri "https://github.com/$repo/releases/download/$tag/$file" -OutFile $dest -UseBasicParsing -TimeoutSec 120
+  $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $dest).Hash
+  if ($actual -ne $asset.digest.Substring(7)) { throw "SHA256 mismatch for $file" }
+
+  $process = Start-Process -FilePath "$env:SystemRoot\System32\msiexec.exe" -ArgumentList "/i `"$dest`" /quiet /norestart" -Wait -PassThru
+  if ($process.ExitCode -eq 3010) {
+    "Installed ArtCraft Launcher $tag. Restart required."
+  } elseif ($process.ExitCode -eq 0) {
+    "Installed ArtCraft Launcher $tag."
+  } else {
+    throw "ArtCraft Launcher installer exited with code $($process.ExitCode)"
+  }
+} finally {
+  Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
+}
+"#)
 }
 
 const FALKON_PACKAGE_ID: &str = "KDE.Falkon";
