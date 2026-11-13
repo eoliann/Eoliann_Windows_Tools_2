@@ -14,7 +14,25 @@
 
 ![Total Downloads](https://img.shields.io/github/downloads/eoliann/Eoliann_Windows_Tools_2/total?style=plastic)
 
-<p align="center"><img src=".github/downloads/chart.svg" alt="Download progress" width="760"></p>
+<details open>
+<summary><b>Downloads · daily (cumulative)</b></summary>
+
+<img src=".github/downloads/chart.svg" alt="Daily download progress" width="760">
+
+</details>
+<details>
+<summary><b>Downloads · monthly</b></summary>
+
+<img src=".github/downloads/chart-monthly.svg" alt="Monthly downloads" width="760">
+
+</details>
+<details>
+<summary><b>Downloads · yearly</b></summary>
+
+<img src=".github/downloads/chart-yearly.svg" alt="Yearly downloads" width="760">
+
+</details>
+
 
 
 # Eoliann Windows Tools 2
