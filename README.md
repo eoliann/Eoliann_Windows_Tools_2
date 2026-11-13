@@ -14,7 +14,7 @@
 
 ![Total Downloads](https://img.shields.io/github/downloads/eoliann/Eoliann_Windows_Tools_2/total?style=plastic)
 
-<p align="center"><img src=".github/downloads/chart.svg" alt="Progres descărcări" width="760"></p>
+<p align="center"><img src=".github/downloads/chart.svg" alt="Download progress" width="760"></p>
 
 
 # Eoliann Windows Tools 2
